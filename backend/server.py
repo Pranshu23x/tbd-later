@@ -51,7 +51,11 @@ class ThesisRequest(BaseModel):
 
 @app.post("/api/search_thesis")
 async def api_search_thesis(req: ThesisRequest):
-    companies = search_by_thesis(req.industry, req.min_growth, req.location)
+    companies = search_by_thesis(
+        industry=req.industry,
+        min_growth_percent=req.min_growth,
+        location=req.location
+    )
     return {"status": "success", "data": companies}
 
 @app.post("/api/simulate")
