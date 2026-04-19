@@ -238,7 +238,7 @@ class ReflexOrchestrator:
             "pipeline": enriched_profiles,
         }
 
-        self._emit({"phase": "data_ready", "detail": f"Pipeline ready: {len(enriched_profiles)} companies"})
+        self._emit({"status": "data_ready", "phase": "data_ready", "detail": f"Pipeline ready: {len(enriched_profiles)} companies", "data": data})
         return data, target_name
 
     # ── Step 3: Run the Debate ───────────────────────────────────────────

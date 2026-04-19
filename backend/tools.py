@@ -361,7 +361,7 @@ class OracleTools:
                 lines.append(f"  Est. Revenue: ${rev_lo:,.0f} - ${rev_hi:,.0f}" if rev_hi else f"  Est. Revenue: ~${rev_lo:,.0f}+")
 
             investors = backing.get('investor_list', [])
-            lines.append(f"  Investors: {', '.join(investors[:5]) if investors else 'None disclosed'}")
+            lines.append(f"  Investors: {', '.join(str(i.get('name', i) if isinstance(i, dict) else i) for i in investors[:5]) if investors else 'None disclosed'}")
 
             if arsenal.get('hiring_openings'):
                 lines.append(f"  Open Jobs: {arsenal['hiring_openings']} (Growth: {arsenal.get('hiring_growth', 'N/A')}%)")

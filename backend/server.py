@@ -75,48 +75,32 @@ async def simulate(req: SimulateRequest):
     """
     async def event_stream():
         try:
-            # ── Phase 1: Data Ingestion ──
-            
-            rival = req.compare_against.strip() if req.compare_against else "TestRival"
-            
-            try:
-                data = dual_fetch(req.target_company, rival)
-            except Exception as e:
-                raise Exception(f"Crustdata API Error: {str(e)}")
+            # ── Use ReflexOrchestrator for the full pipeline ──
+            from orchestrator import ReflexOrchestrator
 
-            # Send the raw data so frontend can build the D3 graph
-            yield _sse({"status": "data_ready", "phase": "ingestion", "message": "Data loaded.", "data": data})
-
-            # ── Phase 2: Graph / Traitor Detection ──
-            traitor_detected = False
-            try:
-                g = GraphManager()
-                g.initialize_schema()
-                traitors = g.detect_boardroom_traitors()
-                g.close()
-                traitor_detected = len(traitors) > 0
-            except Exception as e:
-                print("Neo4j Error (non-fatal):", str(e))
-                # Non-fatal: continue without Neo4j
-                yield _sse({"status": "graph", "phase": "graph", "message": f"Neo4j skipped: {str(e)[:80]}. Continuing..."})
-
-            # ── Phase 3: ReACT Debate (streamed per-turn) ──
-
-            # Use a queue to stream individual turns from the synchronous simulation
             event_queue = queue.Queue()
-            result_holder = {"plan": None, "error": None}
+            result_holder = {"plan": None, "error": None, "traitor_detected": False}
 
             def run_sim_streamed():
                 try:
-                    sim = OracleSimulation(
-                        req.user_type, req.target_company, req.compare_against,
-                        req.benchmarks, req.planning, req.planning_custom, data,
-                        event_callback=lambda evt: event_queue.put(evt),
-                        num_rounds=req.num_rounds
-                    )
-                    plan = sim.run()
+                    # Traitor detection logic could be moved inside the orchestrator or done here
+                    try:
+                        g = GraphManager()
+                        g.initialize_schema()
+                        traitors = g.detect_boardroom_traitors()
+                        g.close()
+                        result_holder["traitor_detected"] = len(traitors) > 0
+                    except Exception as e:
+                        print("Neo4j Error (non-fatal):", str(e))
+                        event_queue.put({"status": "graph", "phase": "graph", "message": f"Neo4j skipped: {str(e)[:80]}. Continuing..."})
+
+                    orch = ReflexOrchestrator(event_callback=lambda evt: event_queue.put(evt))
+                    # The user prompt is passed as target_company from the frontend UI
+                    plan = orch.run(req.target_company, num_rounds=req.num_rounds)
                     result_holder["plan"] = plan
                 except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     result_holder["error"] = str(e)
                 finally:
                     event_queue.put(None)  # Sentinel
@@ -145,7 +129,7 @@ async def simulate(req: SimulateRequest):
                 "phase": "done",
                 "result": {
                     "investment_memo": str(result_holder["plan"] or "").strip(),
-                    "boardroom_traitor_detected": traitor_detected
+                    "boardroom_traitor_detected": result_holder.get("traitor_detected", False)
                 }
             })
 

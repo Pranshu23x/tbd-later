@@ -59,27 +59,27 @@ class DebateAgent:
 
 def _build_company_dossier(company: dict, label: str) -> str:
     """Render a dense, line-by-line data sheet for one company."""
-    cap = company.get("capital", {})
-    muscle = company.get("muscle", {})
-    arsenal = company.get("arsenal", {})
-    budget = company.get("budget", {})
-    backing = company.get("backing", {})
+    cap = company.get("capital") or {}
+    muscle = company.get("muscle") or {}
+    arsenal = company.get("arsenal") or {}
+    budget = company.get("budget") or {}
+    backing = company.get("backing") or {}
 
-    burn = cap.get("monthly_burn_usd", 0)
+    burn = cap.get("monthly_burn_usd", 0) or 0
     burn_str = f"${burn / 1e6:.1f}M/month" if burn else "unknown"
 
-    dept_spend = budget.get("by_department", {})
-    dept_str = " | ".join(f"{k}: ${v // 1000}k/mo" for k, v in dept_spend.items())
+    dept_spend = budget.get("by_department") or {}
+    dept_str = " | ".join(f"{k}: ${v // 1000}k/mo" for k, v in dept_spend.items()) if dept_spend else "N/A"
 
-    cuttable = budget.get("cuttable_line_items", [])
+    cuttable = budget.get("cuttable_line_items") or []
     cuts_str = "\n".join(
-        f"  [{c.get('status','?').upper()}] {c['item']}: ${c['monthly_cost_usd'] // 1000}k/mo"
+        f"  [{c.get('status','?').upper()}] {c.get('item','?')}: ${(c.get('monthly_cost_usd') or 0) // 1000}k/mo"
         for c in cuttable
     ) or "  None identified"
 
-    open_r = arsenal.get("open_roles_by_function", {})
-    new_h  = arsenal.get("recent_hires_30d_by_function", {})
-    hc_fn  = arsenal.get("employee_count_by_function", {})
+    open_r = arsenal.get("open_roles_by_function") or {}
+    new_h  = arsenal.get("recent_hires_30d_by_function") or {}
+    hc_fn  = arsenal.get("employee_count_by_function") or {}
 
     return (
         f"=== {label}: {company.get('name', '?')} ===\n"
@@ -93,7 +93,7 @@ def _build_company_dossier(company: dict, label: str) -> str:
         f"BY DEPT   : {hc_fn}\n"
         f"OPEN ROLES BY DEPT: {open_r}\n"
         f"NEW HIRES LAST 30d: {new_h}\n"
-        f"INVESTORS : {', '.join(backing.get('investor_list', []))}\n"
+        f"INVESTORS : {', '.join(str(i.get('name', i) if isinstance(i, dict) else i) for i in (backing.get('investor_list') or []))}\n"
         f"DEPT SPEND: {dept_str}\n"
         f"CUTTABLE LINE ITEMS:\n{cuts_str}"
     )
@@ -164,8 +164,10 @@ class PersonaFactory:
         market_context: MarketContext,
         target_employees: List[dict],
         rival_employees: List[dict],
-        memory_context: str = "",
-        user_context: str = ""
+        user_context: str = "",
+        supermemory_client: Any = None,
+        scenario: str = "",
+        safe_tag: str = "",
     ):
         my    = market_context.my_company_stats
         rival = market_context.rival_company_stats
@@ -205,7 +207,6 @@ class PersonaFactory:
             f"{rival_dossier}\n\n"
             f"RIVAL EXECUTIVE INTEL:\n{rival_exec_intel}\n\n"
             f"{traitor_str}\n"
-            f"{memory_context}"
         )
 
         agents = []
@@ -222,10 +223,23 @@ class PersonaFactory:
             dept = "Venture Intelligence"
             company_name = "Reflex VC"
             
+            agent_memory = ""
+            if supermemory_client:
+                try:
+                    agent_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"agent-{name.lower()}")
+                    results = supermemory_client.search.documents(
+                        q=scenario, container_tags=[safe_tag, agent_tag]
+                    )
+                    if results:
+                        agent_memory = f"\nYOUR HISTORICAL MEMORY:\n{results}\n"
+                except Exception as e:
+                    print(f"[Supermemory] Search failed for {name}: {e}")
+            
             personal_block = (
                 f"YOUR ROLE:\n"
                 f"  Name: {name} | Title: {title}\n"
                 f"  Mandate: {role['mandate']}\n"
+                f"{agent_memory}"
                 f"\nBEHAVIORAL MANDATE:\n"
                 f"  - Fight for your position, but only with numbers.\n"
                 f"  - 'Significant', 'large', 'major' are not arguments. The number is the argument.\n"
@@ -295,8 +309,8 @@ class OracleSimulation:
         self.oracle_tools = OracleTools(data)
 
         # Supermemory (optional, non-fatal)
-        self.memory_context    = ""
         self.supermemory_client = None
+        self.safe_tag = ""
         supermemory_key = os.getenv("SUPERMEMORY_API_KEY")
         if supermemory_key:
             try:
@@ -304,22 +318,27 @@ class OracleSimulation:
                 self.supermemory_client = Supermemory(api_key=supermemory_key)
                 company_name = data.get("target", {}).get("company", {}).get("name", "Unknown")
                 # Sanitize company name for container_tags (only alphanumeric, hyphens, underscores, colons)
-                safe_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"company-{company_name}")
-                results = self.supermemory_client.search.documents(
-                    q=self.scenario, container_tags=[safe_tag]
-                )
-                if results:
-                    self.memory_context = "\nHISTORICAL CONTEXT: Similar scenario found in memory."
+                self.safe_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"company-{company_name}")
             except Exception as e:
-                print(f"[Supermemory] Skipped: {e}")
+                print(f"[Supermemory] Initialization skipped: {e}")
 
         # Extract employees from data
         target_emps = data.get("target", {}).get("employees", [])
         rival_emps  = data.get("rival",  {}).get("employees", [])
 
-        # Boardroom traitor detection
-        t_inv = set(data.get("target", {}).get("company", {}).get("backing", {}).get("investor_list", []))
-        r_inv = set(data.get("rival",  {}).get("company", {}).get("backing", {}).get("investor_list", []))
+        # Boardroom traitor detection — investor_list may be None or contain dicts
+        def _extract_investor_names(company_data):
+            inv_list = company_data.get("company", {}).get("backing", {}).get("investor_list", None) or []
+            names = []
+            for inv in inv_list:
+                if isinstance(inv, str):
+                    names.append(inv)
+                elif isinstance(inv, dict):
+                    names.append(inv.get("name") or inv.get("investor_name") or str(inv))
+            return set(names)
+
+        t_inv = _extract_investor_names(data.get("target", {}))
+        r_inv = _extract_investor_names(data.get("rival", {}))
         shared = [{"investor": inv} for inv in t_inv & r_inv]
 
         # Build MarketContext
@@ -341,7 +360,13 @@ class OracleSimulation:
         user_context_str = "\n".join(user_context_parts)
 
         self.debate_agents, self.shared_intelligence = PersonaFactory.build_agents(
-            self.market_context, target_emps, rival_emps, self.memory_context, user_context_str
+            market_context=self.market_context,
+            target_employees=target_emps,
+            rival_employees=rival_emps,
+            user_context=user_context_str,
+            supermemory_client=self.supermemory_client,
+            scenario=self.scenario,
+            safe_tag=self.safe_tag
         )
 
         if len(self.debate_agents) < 3:
@@ -737,11 +762,26 @@ class OracleSimulation:
             try:
                 cn = self.data.get("target", {}).get("company", {}).get("name", "Unknown")
                 safe_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"company-{cn}")
+                
+                # Save strategist memo
                 self.supermemory_client.add(
                     content=f"Scenario: {self.scenario}. Move: {self.move}. Plan: {survival_plan}",
-                    container_tags=[safe_tag, "investment-memo"],
+                    container_tags=[safe_tag, "investment-memo", "agent-strategist"],
                 )
-                print("[Supermemory] Plan saved.")
+                
+                # Save each agent's individual statements from the transcript
+                for msg in transcript:
+                    speaker = msg.get("speaker", "unknown")
+                    # Clean the speaker name (e.g. 'Committee Chair (Partner) — OPENING BRIEF' -> 'committee-chair')
+                    base_speaker = speaker.split(' (')[0].lower()
+                    agent_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"agent-{base_speaker}")
+                    
+                    self.supermemory_client.add(
+                        content=f"Scenario: {self.scenario}. My perspective/argument: {msg.get('content', '')}",
+                        container_tags=[safe_tag, agent_tag],
+                    )
+
+                print("[Supermemory] Plan and per-agent memories saved.")
             except Exception as e:
                 print(f"[Supermemory] Save failed: {e}")
 
