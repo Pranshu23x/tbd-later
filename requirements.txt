@@ -1,0 +1,12 @@
+requests
+python-dotenv
+pandas
+neo4j
+crewai
+crewai[tools]
+plotly
+fastapi
+uvicorn
+pydantic
+langchain_openai
+supermemory
