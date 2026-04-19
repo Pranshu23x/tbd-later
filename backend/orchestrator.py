@@ -158,10 +158,10 @@ class ReflexOrchestrator:
         location_raw = (intent.get("search_location") or "").lower().strip()
         iso_codes = REGION_MAP.get(location_raw, [location_raw.upper()] if location_raw else [])
 
-        # Fallback: if industry is still null, default to tech
-        if not industry:
+        # Fallback: if industry is still null, default to a broad tech category
+        if not industry or industry == "Software Development":
             industry = "Technology, Information and Internet"
-            print(f"  ⚠ No industry specified, defaulting to: {industry}")
+            print(f"  ⚠ Using broader industry category: {industry}")
 
         if industry:
             max_hc = intent.get("max_headcount")
@@ -258,6 +258,11 @@ class ReflexOrchestrator:
 
         # Step 2
         data, target_name = self.gather_intelligence(intent)
+        
+        if not data:
+            msg = "No companies matching your investment thesis were found in our live data feeds. Try broadening your criteria (e.g., removing headcount growth or location constraints)."
+            self._emit({"phase": "error", "status": "error", "message": msg})
+            return msg
 
         # Step 3
         print(f"\n{'='*60}")
