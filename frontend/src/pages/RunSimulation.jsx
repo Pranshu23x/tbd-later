@@ -3,6 +3,8 @@ import { useSearchParams, Link } from 'react-router-dom'
 import * as d3 from 'd3'
 import ReactMarkdown from 'react-markdown'
 
+const API_BASE_URL = 'https://reflex-36xb.onrender.com'
+
 /* ── Color palette for entity types (from MiroFish GraphPanel) ── */
 const ENTITY_COLORS = {
   Company:  '#5c67f2',
@@ -295,7 +297,7 @@ const RunSimulation = () => {
         // Display the user prompt immediately at the top of the timeline
         setMessages([{ role: 'System', content: `**User Prompt:** ${query}`, type: 'system' }])
         
-        const res = await fetch('http://localhost:8000/api/simulate', {
+        const res = await fetch(`${API_BASE_URL}/api/simulate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
