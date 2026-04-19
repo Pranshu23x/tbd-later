@@ -13,8 +13,8 @@ Call a tool using EXACTLY this format (one tool per response):
 <tool_call>{"name": "tool_name", "parameters": {"param": "value"}}</tool_call>
 
 TOOL 1: query_company_data
-  Params:  {"company": "OpenAI" or "Anthropic", "field_path": "dot.notation.path"}
-  Examples: capital.monthly_burn_usd | muscle.attrition_last_90d | arsenal.open_roles_by_function
+  Params:  {"company": "company name", "field_path": "dot.notation.path"}
+  Examples: capital.funding_total | muscle.headcount | arsenal.employee_count_by_function
 
 TOOL 2: query_employee_signals
   Params:  {"name": "Full Name"}
@@ -23,10 +23,25 @@ TOOL 3: compare_field
   Params:  {"field_path": "dot.notation.path"}
 
 TOOL 4: list_cuttable_items
-  Params:  {"company": "OpenAI" or "Anthropic"}
+  Params:  {"company": "company name"}
 
 TOOL 5: get_dept_budget
-  Params:  {"company": "OpenAI" or "Anthropic"}
+  Params:  {"company": "company name"}
+
+TOOL 6: search_companies
+  Params:  {"industry": "Software Development", "location": "USA"}
+  Use this to discover companies matching an investment thesis. Returns name, domain, headcount.
+
+TOOL 7: enrich_company
+  Params:  {"company_name": "Retool"}
+  Use this to get the FULL Crustdata profile for any company: funding, headcount, investors, growth.
+  THIS IS YOUR MOST POWERFUL TOOL. Use it to get hard numbers for your arguments.
+
+TOOL 8: web_search_live
+  Params:  {"query": "company name recent news"}
+
+TOOL 9: calculate_traction_score
+  Params:  {"company": "company name"}
 """
 
 REACT_RULES = """\
@@ -42,6 +57,11 @@ REACT_RULES = """\
 8. Address people by name: "Sam, that's wrong because..." / "Brad, look at the numbers..."
 9. **Bold every important number, dollar amount, percentage, and person's name** using **asterisks**.
    Example: "We're burning **$52M/month** and **Mira** knows the **23 engineers** we lost aren't coming back."
+10. PREFER these tools for live data accuracy:
+    - enrich_company: Call this FIRST to get real funding, headcount, and investor data for any company.
+    - web_search_live: Call this to verify claims with recent news, press releases, or public posts.
+    - search_companies: Call this to find comparable companies or competitors in the same space.
+    Do NOT rely on stale data in the briefing. Always verify with a live tool call.
 """
 
 TOOL_REJECT_MSG = (
@@ -197,6 +217,7 @@ You are {name}. Pull any final numbers you need, then make your decision in 4-5 
 Talk like a real VC Partner ending a meeting:
 - Say who was right between the Bull ({agent2_name}) and Bear ({agent3_name}), and why. One sentence each.
 - State your final investment decision (Invest, Pass, or Request More Data).
+- YOU MUST SELECT EXACTLY ONE WINNER FROM THE PIPELINE. Name the company explicitly.
 - Give one specific due diligence action item with a named owner.
 - State the one measurable milestone that would prove this thesis right or wrong.
 No hedging. This is binding. Sound like someone who just made a hard call.
@@ -226,9 +247,11 @@ STRATEGIST_PROMPT = """\
 {transcript}
 
 Write the Investment Memo. Use tools to verify the numbers before writing.
+When you are ready to write the memo, you MUST start your response with "Final Answer:" followed by the memo.
 Bold all important numbers, names, and dollar amounts with **asterisks**.
 Never use em dashes anywhere. Use commas or periods instead.
 
+Final Answer:
 ## The Investment Thesis
 2-3 sentences: the market opportunity, the target's traction, and the competitive moat.
 

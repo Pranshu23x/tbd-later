@@ -14,7 +14,7 @@ import traceback
 import queue
 import threading
 
-from ingestor import dual_fetch, fetch_company_profile
+from ingestor import dual_fetch, fetch_company_profile, search_by_thesis
 from simulation_engine import OracleSimulation
 from graph_manager import GraphManager
 
@@ -43,6 +43,16 @@ async def search_company(query: str):
     if not profile:
         raise HTTPException(status_code=404, detail="Company not found")
     return {"status": "success", "data": profile}
+
+class ThesisRequest(BaseModel):
+    industry: str
+    min_growth: float = 0.0
+    location: str = ""
+
+@app.post("/api/search_thesis")
+async def api_search_thesis(req: ThesisRequest):
+    companies = search_by_thesis(req.industry, req.min_growth, req.location)
+    return {"status": "success", "data": companies}
 
 @app.post("/api/simulate")
 async def simulate(req: SimulateRequest):
@@ -134,7 +144,7 @@ async def simulate(req: SimulateRequest):
                 "status": "complete",
                 "phase": "done",
                 "result": {
-                    "survival_plan": str(result_holder["plan"] or "").strip(),
+                    "investment_memo": str(result_holder["plan"] or "").strip(),
                     "boardroom_traitor_detected": traitor_detected
                 }
             })

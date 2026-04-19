@@ -1,21 +1,26 @@
+"""
+Crustdata API Integration — Search → Enrich Pipeline
+=====================================================
+Uses the official Crustdata API workflow:
+  1. /company/search       — lightweight discovery (0.03 credits/result)
+  2. /company/enrich       — full profiles by crustdata_company_id (2 credits/record)
+  3. /company/identify     — FREE entity resolution for name/domain lookups
+  4. /company/search/autocomplete — FREE field value discovery
+
+Docs: https://docs.crustdata.com
+"""
+
 import os
 import json
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 CRUSTDATA_API_TOKEN = os.getenv("CRUSTDATA_API_TOKEN")
 BASE_URL = "https://api.crustdata.com"
-
-def mock_dual_fetch():
-    mock_path = os.path.join(os.path.dirname(__file__), "..", "data", "sample.json")
-    try:
-        with open(mock_path, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print("Mock file not found at", mock_path)
-        return {}
 
 def get_headers():
     if not CRUSTDATA_API_TOKEN:
@@ -26,144 +31,295 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
-def fetch_company_profile(company_name: str):
-    """
-    Fetch a company's profile using Crustdata API.
-    Returns capital, muscle, arsenal, and backing metrics.
-    """
-    search_payload = {
-        "filters": [
-            {"filter_type": "company_name", "type": "eq", "value": company_name}
-        ],
-        "limit": 1
-    }
-    company_search_url = f"{BASE_URL}/v1/company/search"
-    response = requests.post(company_search_url, json=search_payload, headers=get_headers())
-    
-    if response.status_code != 200:
-        print(f"Error fetching company {company_name}: {response.text}")
-        return None
-        
-    companies = response.json().get("data", [])
 
-    if not companies:
+# ── Company Identify (FREE) ─────────────────────────────────────────────
+
+def identify_company(name: str) -> dict | None:
+    """
+    FREE entity resolution. Returns basic_info + crustdata_company_id.
+    Use this to resolve a name to an ID, then enrich by ID for full data.
+    """
+    payload = {"names": [name]}
+    try:
+        r = requests.post(f"{BASE_URL}/company/identify", json=payload,
+                          headers=get_headers(), verify=False)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return None
+        matches = data[0].get("matches", [])
+        if not matches:
+            return None
+        # Return best match (highest confidence)
+        best = max(matches, key=lambda m: m.get("confidence_score", 0))
+        return best.get("company_data", {})
+    except Exception:
         return None
-        
-    c = companies[0]
-    
+
+
+# ── Company Enrich (by ID — full profile) ────────────────────────────────
+
+def enrich_by_ids(company_ids: list[int]) -> list[dict]:
+    """
+    Batch enrich companies by crustdata_company_id.
+    Returns full profiles: headcount, funding, revenue, hiring, people, etc.
+    Cost: 2 credits per record.
+    """
+    if not company_ids:
+        return []
+    payload = {
+        "crustdata_company_ids": company_ids,
+        "fields": [
+            "basic_info", "headcount", "funding", "revenue",
+            "hiring", "people", "locations", "taxonomy",
+            "followers", "competitors"
+        ]
+    }
+    try:
+        r = requests.post(f"{BASE_URL}/company/enrich", json=payload,
+                          headers=get_headers(), verify=False)
+        if r.status_code != 200:
+            print(f"  [enrich] Error {r.status_code}: {r.text[:200]}")
+            return []
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return []
+
+        profiles = []
+        for entry in data:
+            matches = entry.get("matches", [])
+            if not matches:
+                continue
+            best = max(matches, key=lambda m: m.get("confidence_score", 0))
+            cd = best.get("company_data", {})
+            if cd:
+                profiles.append(_normalize_enriched(cd))
+        return profiles
+    except Exception as e:
+        print(f"  [enrich] Exception: {e}")
+        return []
+
+
+def _normalize_enriched(cd: dict) -> dict:
+    """
+    Normalize the full enriched company_data into our standard format.
+    """
+    bi = cd.get("basic_info", {})
+    hc = cd.get("headcount", {})
+    fund = cd.get("funding", {})
+    rev = cd.get("revenue", {}).get("estimated", {})
+    hiring = cd.get("hiring", {})
+    people = cd.get("people", {})
+
     return {
-        "id": c.get("id"),
-        "name": c.get("name"),
+        "id": cd.get("crustdata_company_id") or bi.get("crustdata_company_id"),
+        "name": bi.get("name", "Unknown"),
+        "domain": bi.get("primary_domain", ""),
         "capital": {
-            "funding_total": c.get("funding_total"),
-            "last_funding_date": c.get("last_funding_date")
+            "funding_total": fund.get("total_investment_usd"),
+            "last_round_amount": fund.get("last_round_amount_usd"),
+            "last_funding_date": fund.get("last_fundraise_date"),
+            "last_round_type": fund.get("last_round_type"),
+            "revenue_lower": rev.get("lower_bound_usd"),
+            "revenue_upper": rev.get("upper_bound_usd"),
         },
         "muscle": {
-            "headcount": c.get("headcount"),
-            "headcount_growth_percentage": c.get("headcount_growth_percentage")
+            "headcount": hc.get("total"),
+            "headcount_growth_percent": hc.get("growth_percent", {}).get("yoy") if isinstance(hc.get("growth_percent"), dict) else hc.get("growth_percent"),
+            "by_role": hc.get("by_role_absolute", {}),
         },
         "arsenal": {
-            "employee_count_by_function": c.get("employee_count_by_function", {})
+            "industry": bi.get("industries", []),
+            "year_founded": bi.get("year_founded"),
+            "company_type": bi.get("company_type"),
+            "hiring_openings": hiring.get("openings_count"),
+            "hiring_growth": hiring.get("openings_growth_percent"),
         },
         "backing": {
-            "investor_list": c.get("investor_list", [])
-        }
-    }
-
-def fetch_employee_data(company_id: str):
-    """
-    Deep Employee Extraction mapping to the detailed schema.
-    """
-    people_search_payload = {
-        "filters": [
-            {"filter_type": "company_id", "type": "eq", "value": company_id}
-        ],
-        "limit": 10 # Limit for prototyping
-    }
-    
-    people_url = f"{BASE_URL}/v1/person/search"
-    response = requests.post(people_url, json=people_search_payload, headers=get_headers())
-    
-    if response.status_code != 200:
-        print(f"Error fetching people for company {company_id}: {response.text}")
-        return []
-        
-    people_data = response.json().get("data", [])
-    
-    mapped_employees = []
-    for p in people_data:
-        mapped_employees.append({
-            "professional_identity": {
-                "full_name": p.get("name"),
-                "current_title": p.get("title"),
-                "seniority_level": p.get("seniority_level"),
-                "department": p.get("department"),
-                "location": p.get("location")
-            },
-            "deep_work_history": p.get("work_history", []), # Assumes structured history
-            "academic_background": p.get("education_history", []),
-            "signals_and_vibe": {
-                "social_posts": p.get("recent_posts", []),
-                "engagement_metrics": p.get("engagement_metrics", {}),
-                "recent_job_changes": p.get("job_changes_last_year", 0)
-            }
-        })
-    return mapped_employees
-
-def dual_fetch(my_company_name: str, rival_company_name: str):
-    """
-    The Dual-Fetch pattern to get both protagonist and antagonist.
-    """
-    if not CRUSTDATA_API_TOKEN or CRUSTDATA_API_TOKEN == "your_crustdata_token_here":
-        print("Using sample.json mockup since CRUSTDATA_API_TOKEN is missing...")
-        return mock_dual_fetch()
-        
-    my_company = fetch_company_profile(my_company_name)
-    rival_company = fetch_company_profile(rival_company_name)
-    
-    my_employees = fetch_employee_data(my_company["id"]) if my_company else []
-    rival_employees = fetch_employee_data(rival_company["id"]) if rival_company else []
-    
-    return {
-        "target": {
-            "company": my_company,
-            "employees": my_employees
+            "investor_list": fund.get("investors", []),
         },
-        "rival": {
-            "company": rival_company,
-            "employees": rival_employees
-        }
+        "people": {
+            "founders": people.get("founders", []),
+            "cxos": people.get("cxos", []),
+            "decision_makers": people.get("decision_makers", []),
+        },
     }
 
-def search_by_thesis(industry: str = None, min_growth: float = None, location: str = None, limit: int = 5):
+
+# ── Company Search (lightweight discovery) ───────────────────────────────
+
+def search_by_thesis(industry: str = None, min_headcount: int = None,
+                     max_headcount: int = None, location=None, limit: int = 10) -> list[dict]:
     """
-    Search for companies matching a specific investment thesis.
-    Example: 'B2B SaaS', '20% growth', 'India'
+    Search for companies matching an investment thesis.
+    Uses /company/search with proper filter structure.
+
+    Args:
+        industry: Crustdata industry label (use autocomplete to discover exact values)
+        min_headcount: Minimum employee count
+        max_headcount: Maximum employee count (use for startup searches)
+        location: ISO3 code string ("USA") or list (["DEU","FRA"])
+        limit: Max results (1-1000)
+
+    Returns: list of company dicts from the `companies` response array.
     """
-    filters = []
+    conditions = []
+
     if industry:
-        filters.append({"filter_type": "industry", "type": "eq", "value": industry})
-    if min_growth:
-        filters.append({"filter_type": "headcount_growth_percentage", "type": "gte", "value": min_growth})
+        conditions.append({
+            "field": "taxonomy.professional_network_industry",
+            "type": "=",
+            "value": industry
+        })
+
+    if min_headcount:
+        conditions.append({
+            "field": "headcount.total",
+            "type": ">",
+            "value": min_headcount
+        })
+
+    if max_headcount:
+        conditions.append({
+            "field": "headcount.total",
+            "type": "=<",
+            "value": max_headcount
+        })
+
     if location:
-        filters.append({"filter_type": "location", "type": "contains", "value": location})
+        if isinstance(location, list):
+            conditions.append({
+                "field": "locations.country",
+                "type": "in",
+                "value": location
+            })
+        else:
+            conditions.append({
+                "field": "locations.country",
+                "type": "=",
+                "value": location
+            })
 
     payload = {
-        "filters": filters,
-        "limit": limit
+        "limit": limit,
+        "sorts": [{"column": "headcount.total", "order": "desc"}],
+        "fields": [
+            "crustdata_company_id",
+            "basic_info.name",
+            "basic_info.primary_domain",
+            "headcount.total",
+            "locations.country",
+            "funding.total_investment_usd",
+            "revenue.estimated.lower_bound_usd",
+            "taxonomy.professional_network_industry"
+        ]
     }
-    
-    response = requests.post(f"{BASE_URL}/v1/company/search", json=payload, headers=get_headers())
-    
-    if response.status_code != 200:
-        print(f"Error searching by thesis: {response.text}")
-        return []
-        
-    return response.json().get("data", [])
 
-if __name__ == "__main__":
-    # Example Dual Fetch
-    data = dual_fetch("Zepto", "Blinkit")
-    with open("../data/dual_fetch_mock.json", "w") as f:
-        json.dump(data, f, indent=4)
-    print("Dual fetch test complete.")
+    if len(conditions) > 1:
+        payload["filters"] = {"op": "and", "conditions": conditions}
+    elif len(conditions) == 1:
+        payload["filters"] = conditions[0]
+
+    try:
+        r = requests.post(f"{BASE_URL}/company/search", json=payload,
+                          headers=get_headers(), verify=False)
+        if r.status_code != 200:
+            print(f"  [search] Error {r.status_code}: {r.text[:200]}")
+            return []
+        return r.json().get("companies", [])
+    except Exception as e:
+        print(f"  [search] Exception: {e}")
+        return []
+
+
+# ── Fetch Company Profile (Identify → Enrich) ───────────────────────────
+
+def fetch_company_profile(company_name: str) -> dict | None:
+    """
+    High-level: resolve a company name to full profile.
+    Step 1: Identify (FREE) to get crustdata_company_id
+    Step 2: Enrich by ID for full data
+    """
+    # Step 1: Identify
+    identified = identify_company(company_name)
+    if not identified:
+        return None
+
+    bi = identified.get("basic_info", {})
+    cid = identified.get("crustdata_company_id") or bi.get("crustdata_company_id")
+
+    if not cid:
+        # Return basic info only
+        return {
+            "id": None,
+            "name": bi.get("name", company_name),
+            "domain": bi.get("primary_domain", ""),
+            "capital": {}, "muscle": {}, "arsenal": {}, "backing": {}, "people": {}
+        }
+
+    # Step 2: Enrich by ID
+    enriched = enrich_by_ids([cid])
+    if enriched:
+        return enriched[0]
+
+    # Fallback to basic info
+    return {
+        "id": cid,
+        "name": bi.get("name", company_name),
+        "domain": bi.get("primary_domain", ""),
+        "capital": {}, "muscle": {}, "arsenal": {}, "backing": {}, "people": {}
+    }
+
+
+# ── Search + Enrich Pipeline ────────────────────────────────────────────
+
+def search_and_enrich(industry: str = None, min_headcount: int = None,
+                      location=None, limit: int = 10) -> list[dict]:
+    """
+    Full pipeline: Search → collect IDs → batch Enrich.
+    Returns fully enriched company profiles.
+    """
+    # Step 1: Search
+    results = search_by_thesis(industry, min_headcount, location, limit)
+    if not results:
+        return []
+
+    # Step 2: Collect IDs
+    ids = [c.get("crustdata_company_id") for c in results if c.get("crustdata_company_id")]
+    if not ids:
+        return results  # Return search results as-is
+
+    # Step 3: Batch enrich
+    enriched = enrich_by_ids(ids)
+    return enriched if enriched else results
+
+
+# ── Autocomplete (FREE) ─────────────────────────────────────────────────
+
+def autocomplete_field(field: str, query: str = "", limit: int = 10) -> list[str]:
+    """
+    Discover valid field values for search filters. FREE.
+    Example: autocomplete_field("taxonomy.professional_network_industry", "soft")
+    """
+    payload = {"field": field, "query": query, "limit": limit}
+    try:
+        r = requests.post(f"{BASE_URL}/company/search/autocomplete", json=payload,
+                          headers=get_headers(), verify=False)
+        if r.status_code != 200:
+            return []
+        suggestions = r.json().get("suggestions", [])
+        return [s.get("value") for s in suggestions]
+    except Exception:
+        return []
+
+
+# ── Legacy dual_fetch (compatibility) ────────────────────────────────────
+
+def dual_fetch(target_name: str, rival_name: str = None):
+    target_profile = fetch_company_profile(target_name)
+    rival_profile = fetch_company_profile(rival_name) if rival_name else None
+    return {
+        "target": {"company": target_profile or {"name": target_name}, "employees": []},
+        "rival": {"company": rival_profile or {"name": rival_name or "Industry Average"}, "employees": []}
+    }

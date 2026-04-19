@@ -8,6 +8,8 @@ import re
 import requests
 from typing import Dict, Any, List, Optional
 from ingestor import get_headers, BASE_URL
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class OracleTools:
@@ -64,6 +66,19 @@ class OracleTools:
             "params": {
                 "company": "Company name: 'OpenAI' or 'Anthropic'"
             }
+        },
+        "search_companies": {
+            "description": "Search Crustdata for companies matching an investment thesis. Returns up to 5 matches with name, domain, headcount, and country.",
+            "params": {
+                "industry": "Industry label (e.g., 'Software Development', 'Biotechnology Research')",
+                "location": "ISO3 country code (e.g., 'USA', 'IND', 'GBR'). Optional."
+            }
+        },
+        "enrich_company": {
+            "description": "Get the full Crustdata profile for a company by name. Returns funding, headcount, investors, growth metrics. Use this to get hard numbers for your argument.",
+            "params": {
+                "company_name": "The company name to enrich (e.g., 'Retool', 'Notion', 'Zepto')"
+            }
         }
     }
 
@@ -117,6 +132,13 @@ class OracleTools:
                 return self.web_search_live(params.get("query", ""))
             elif tool_name == "calculate_traction_score":
                 return self.calculate_traction_score(params.get("company", "OpenAI"))
+            elif tool_name == "search_companies":
+                return self.search_companies(
+                    params.get("industry", "Software Development"),
+                    params.get("location", "")
+                )
+            elif tool_name == "enrich_company":
+                return self.enrich_company(params.get("company_name", ""))
             else:
                 return (f"Unknown tool: '{tool_name}'. "
                         f"Available tools: {', '.join(self.AVAILABLE_TOOLS.keys())}")
@@ -254,7 +276,7 @@ class OracleTools:
             return "Error: Empty query."
         payload = {"queries": [query]}
         try:
-            resp = requests.post(f"{BASE_URL}/v1/web/search/live", json=payload, headers=get_headers())
+            resp = requests.post(f"{BASE_URL}/v1/web/search/live", json=payload, headers=get_headers(), verify=False)
             if resp.status_code == 200:
                 data = resp.json()
                 results = data.get("data", [])
@@ -282,3 +304,83 @@ class OracleTools:
         grade = "A" if score > 80 else "B" if score > 60 else "C" if score > 40 else "D"
         
         return f"TRACTION SCORE for {label}: {score:.1f}/100 (Grade: {grade})\nGrowth factor: {growth}%"
+
+    def search_companies(self, industry: str, location: str = "") -> str:
+        """Search Crustdata for companies matching an investment thesis."""
+        from ingestor import search_by_thesis
+        try:
+            companies = search_by_thesis(industry=industry, location=location if location else None, limit=5)
+            if not companies:
+                return f"No companies found for industry='{industry}', location='{location}'."
+            
+            lines = [f"SEARCH RESULTS — {industry} (location: {location or 'any'}):\n"]
+            for i, c in enumerate(companies, 1):
+                name = c.get("basic_info", {}).get("name", "Unknown")
+                domain = c.get("basic_info", {}).get("primary_domain", "")
+                hc = c.get("headcount", {}).get("total", "N/A")
+                fund = c.get("funding", {}).get("total_investment_usd")
+                rev = c.get("revenue", {}).get("estimated", {}).get("lower_bound_usd")
+                fin = f"Funded: ${fund:,.0f}" if fund and fund > 0 else (f"Revenue: ~${rev:,.0f}" if rev else "N/A")
+                lines.append(f"  {i}. {name} | {domain} | HC: {hc} | {fin}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Search failed: {str(e)}"
+
+    def enrich_company(self, company_name: str) -> str:
+        """Enrich a company by name via Crustdata API. Returns full profile."""
+        from ingestor import fetch_company_profile
+        try:
+            if not company_name:
+                return "Error: No company name provided."
+            
+            profile = fetch_company_profile(company_name)
+            if not profile:
+                return f"No profile found for '{company_name}'. The company may not exist in Crustdata."
+            
+            cap = profile.get('capital', {})
+            muscle = profile.get('muscle', {})
+            backing = profile.get('backing', {})
+            arsenal = profile.get('arsenal', {})
+            people = profile.get('people', {})
+
+            fund = cap.get('funding_total')
+            rev_lo = cap.get('revenue_lower')
+            rev_hi = cap.get('revenue_upper')
+
+            lines = [
+                f"ENRICHED PROFILE — {profile.get('name', company_name)}:",
+                f"  Domain: {profile.get('domain', 'N/A')}",
+                f"  Headcount: {muscle.get('headcount', 'N/A')}",
+                f"  HC Growth: {muscle.get('headcount_growth_percent', 'N/A')}%",
+                f"  Total Funding: ${fund:,.0f}" if fund else "  Total Funding: N/A",
+                f"  Last Round: {cap.get('last_round_type', 'N/A')} — ${cap.get('last_round_amount', 'N/A')}",
+                f"  Last Funding Date: {cap.get('last_funding_date', 'N/A')}",
+            ]
+
+            if rev_lo:
+                lines.append(f"  Est. Revenue: ${rev_lo:,.0f} - ${rev_hi:,.0f}" if rev_hi else f"  Est. Revenue: ~${rev_lo:,.0f}+")
+
+            investors = backing.get('investor_list', [])
+            lines.append(f"  Investors: {', '.join(investors[:5]) if investors else 'None disclosed'}")
+
+            if arsenal.get('hiring_openings'):
+                lines.append(f"  Open Jobs: {arsenal['hiring_openings']} (Growth: {arsenal.get('hiring_growth', 'N/A')}%)")
+            
+            lines.append(f"  Industry: {arsenal.get('industry', 'N/A')}")
+            lines.append(f"  Founded: {arsenal.get('year_founded', 'N/A')}")
+            lines.append(f"  Type: {arsenal.get('company_type', 'N/A')}")
+
+            if people.get('founders'):
+                founders = [f.get('full_name', '') for f in people['founders'][:3] if isinstance(f, dict)]
+                if founders:
+                    lines.append(f"  Founders: {', '.join(founders)}")
+
+            if muscle.get('by_role'):
+                top_roles = sorted(muscle['by_role'].items(), key=lambda x: x[1], reverse=True)[:5]
+                roles_str = ", ".join(f"{k}: {v}" for k, v in top_roles)
+                lines.append(f"  Top Roles: {roles_str}")
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Enrichment failed: {str(e)}"
+

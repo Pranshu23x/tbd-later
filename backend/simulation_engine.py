@@ -10,8 +10,8 @@ Flow:
   Round 1 : Agent 2 reacts | Agent 3 counters (both with tool access)
   Round 2 : Agent 2 rebuts | Agent 3 defends (both with tool access)
   Round 3 : Agent 2 final  | Agent 3 final  (lightweight, 1 tool min)
-  Verdict : CEO makes binding 6-point decision (with tool access)
-  Plan    : Strategist writes 100-Day Survival Plan (3 tool min)
+  Verdict : Chair makes binding decision (with tool access)
+  Plan    : Strategist writes Investment Memo (3 tool min)
 """
 
 import sys
@@ -102,16 +102,36 @@ def _build_company_dossier(company: dict, label: str) -> str:
 def _parse_tool_calls(response: str) -> List[Dict[str, Any]]:
     """
     Parse <tool_call>...</tool_call> blocks from LLM response.
-    Falls back to bare JSON if no XML tags found (same as MiroFish).
+    Supports both JSON payload and XML inner payload.
+    Falls back to bare JSON if no XML tags found.
     """
     calls = []
 
-    # Primary: XML-style tags
+    # Primary: XML-style tags with JSON payload
     for match in re.finditer(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", response, re.DOTALL):
         try:
             calls.append(json.loads(match.group(1)))
         except json.JSONDecodeError:
             pass
+
+    # Secondary: XML-style tags with XML payload (name and parameters)
+    if not calls:
+        for match in re.finditer(r"<tool_call>(.*?)</tool_call>", response, re.DOTALL):
+            inner = match.group(1)
+            name_match = re.search(r"<name>(.*?)</name>", inner, re.DOTALL)
+            params_match = re.search(r"<parameters>(.*?)</parameters>", inner, re.DOTALL)
+            
+            if name_match:
+                name = name_match.group(1).strip()
+                params = {}
+                if params_match:
+                    params_text = params_match.group(1)
+                    try:
+                        params = json.loads(params_text)
+                    except json.JSONDecodeError:
+                        for param_match in re.finditer(r"<([^>]+)>(.*?)</\1>", params_text, re.DOTALL):
+                            params[param_match.group(1)] = param_match.group(2).strip()
+                calls.append({"name": name, "parameters": params})
 
     if calls:
         return calls
@@ -188,46 +208,30 @@ class PersonaFactory:
             f"{memory_context}"
         )
 
-        # Per-agent budget context
-        budget     = my.get("budget", {})
-        dept_spend = budget.get("by_department", {})
-        cuttable   = budget.get("cuttable_line_items", [])
-        cuttable_str = "\n".join(
-            f"  {c['item']}: ${c['monthly_cost_usd'] // 1000}k/month [{c.get('status','?')}]"
-            for c in cuttable
-        ) or "  None identified"
-
         agents = []
-        for emp in target_employees[:3]:
-            ident       = emp.get("professional_identity", {})
-            name        = ident.get("full_name", "Unknown")
-            title       = ident.get("current_title", "Executive")
-            dept        = ident.get("department", "")
-            company_name = my.get("name", "Company")
-            signals     = emp.get("signals_and_vibe", {})
-            history     = emp.get("deep_work_history", [])
-            dept_budget = dept_spend.get(dept, dept_spend.get(dept.split()[0] if dept else "", 0))
-            dept_budget_str = f"${dept_budget // 1000}k/month" if dept_budget else "not itemized"
-            total_burn  = my.get("capital", {}).get("monthly_burn_usd", 0)
-            total_str   = f"${total_burn // 1_000_000:.0f}M/month" if total_burn else "unknown"
+        
+        vc_roles = [
+            {"name": "Committee Chair", "title": "Partner", "mandate": "You must listen to both sides and evaluate the deal objectively."},
+            {"name": "Bull Analyst", "title": "Associate", "mandate": "You are arguing TO INVEST. Focus on the upside, growth metrics, and market opportunity. Defend the startup's valuation."},
+            {"name": "Bear Analyst", "title": "Principal", "mandate": "You are arguing TO PASS. Focus on the downside, high burn rate, weak team signals, and market risks. Be ruthless about the numbers."}
+        ]
 
+        for role in vc_roles:
+            name = role["name"]
+            title = role["title"]
+            dept = "Venture Intelligence"
+            company_name = "Reflex VC"
+            
             personal_block = (
-                f"YOUR PERSONAL BRIEF:\n"
-                f"  Name: {name} | Role: {title} | Dept: {dept}\n"
-                f"  Department budget: {dept_budget_str} of {total_str} total company burn\n"
-                f"  Your signals (hard numbers): {json.dumps(signals, indent=4)}\n"
-                f"  Your career history: {json.dumps(history, indent=4)}\n"
-                f"\nCOMPANY CUTTABLE LINE ITEMS (propose any of these during debate):\n"
-                f"{cuttable_str}\n"
+                f"YOUR ROLE:\n"
+                f"  Name: {name} | Title: {title}\n"
+                f"  Mandate: {role['mandate']}\n"
                 f"\nBEHAVIORAL MANDATE:\n"
-                f"  - Fight for your department's priority, but only with numbers.\n"
+                f"  - Fight for your position, but only with numbers.\n"
                 f"  - 'Significant', 'large', 'major' are not arguments. The number is the argument.\n"
-                f"  - When you concede, explain which specific number forced the concession.\n"
                 f"  - Call tools to verify before claiming a number you are unsure of.\n"
             )
 
-            # Build fully-rendered system prompt (no {min_tools} placeholders —
-            # enforcement is purely in the loop via rejection messages)
             system_prompt = (
                 f"You are {name}, {title} at {company_name}.\n\n"
                 f"{shared_intelligence}\n\n"
@@ -242,8 +246,8 @@ class PersonaFactory:
                 dept=dept,
                 company=company_name,
                 system_prompt=system_prompt,
-                signals=signals,
-                career=history,
+                signals={},
+                career=[],
             ))
 
         return agents, shared_intelligence
@@ -261,15 +265,15 @@ class OracleSimulation:
     MODEL       = "deepseek-chat"
     TEMPERATURE = 0.4
 
-    # Minimum tool calls per turn — lower = faster debate
-    MIN_CEO_BRIEF    = 1
-    MIN_EXEC         = 1
+    # Minimum tool calls per turn — agents must call at least this many tools
+    MIN_CEO_BRIEF    = 2
+    MIN_EXEC         = 2   # Bull/Bear must verify with live data
     MIN_ESCALATE     = 1   # Quick-fire rounds
     MIN_FINAL_STMT   = 1
-    MIN_CEO_VERDICT  = 1
+    MIN_CEO_VERDICT  = 2   # Chair must pull live data before deciding
     MIN_STRATEGIST   = 2
 
-    MAX_TOOLS = 3   # Lower cap = faster turns
+    MAX_TOOLS = 5   # Higher cap = more live data calls per turn
 
     def __init__(self, user_type: str, target_company: str, compare_against: str, benchmarks: list, planning: list, planning_custom: str, data: dict, event_callback=None, num_rounds: int = 4):
         self.event_callback = event_callback or (lambda evt: None)
@@ -299,8 +303,10 @@ class OracleSimulation:
                 from supermemory import Supermemory
                 self.supermemory_client = Supermemory(api_key=supermemory_key)
                 company_name = data.get("target", {}).get("company", {}).get("name", "Unknown")
+                # Sanitize company name for container_tags (only alphanumeric, hyphens, underscores, colons)
+                safe_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"company-{company_name}")
                 results = self.supermemory_client.search.documents(
-                    q=self.scenario, container_tags=[f"company-{company_name}"]
+                    q=self.scenario, container_tags=[safe_tag]
                 )
                 if results:
                     self.memory_context = "\nHISTORICAL CONTEXT: Similar scenario found in memory."
@@ -354,12 +360,22 @@ class OracleSimulation:
     # ── Core ReACT loop ───────────────────────────────────────────────────
 
     def _call_llm(self, messages: List[Dict]) -> str:
-        resp = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=messages,
-            temperature=self.TEMPERATURE,
-        )
-        return resp.choices[0].message.content
+        import time
+        for attempt in range(3):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.MODEL,
+                    messages=messages,
+                    temperature=self.TEMPERATURE,
+                )
+                return resp.choices[0].message.content
+            except Exception as e:
+                if attempt < 2:
+                    wait = 2 ** attempt
+                    print(f"    [LLM] Connection error, retrying in {wait}s... ({e.__class__.__name__})")
+                    time.sleep(wait)
+                else:
+                    raise
 
     def _call_llm_stream(self, messages: List[Dict], speaker: str, title: str, label: str, round_num: int) -> str:
         """Stream tokens to frontend via event_callback, return full text."""
@@ -427,10 +443,13 @@ class OracleSimulation:
         tool_count  = 0
         used_tools  = []
         all_tools   = list(self.oracle_tools.AVAILABLE_TOOLS.keys())
+        loop_limit = 5
+        attempts = 0
 
         print(f"    [{label}] ReACT loop starting (min={min_tools}, max={max_tools})")
 
-        while True:
+        while attempts < loop_limit:
+            attempts += 1
             response = self._call_llm(messages)
 
             # ── Tool call path ────────────────────────────────────────────
@@ -464,7 +483,7 @@ class OracleSimulation:
 
             # ── Final Answer path ─────────────────────────────────────────
             if "Final Answer:" in response:
-                if tool_count < min_tools:
+                if tool_count < min_tools and attempts < loop_limit - 1:
                     rejection = TOOL_REJECT_MSG.format(n=tool_count, min_tools=min_tools)
                     print(f"    [{label}] Final Answer rejected ({tool_count}/{min_tools} tools)")
                     messages.append({"role": "assistant", "content": response})
@@ -478,18 +497,21 @@ class OracleSimulation:
                 return answer
 
             # ── Max tools reached — force answer ──────────────────────────
-            if tool_count >= max_tools:
-                force_msg = TOOL_LIMIT_MSG.format(max_tools=max_tools)
-                print(f"    [{label}] Max tools reached, forcing Final Answer")
+            if tool_count >= max_tools or attempts >= loop_limit - 1:
+                force_msg = TOOL_LIMIT_MSG.format(max_tools=max_tools) if tool_count >= max_tools else "Please provide your Final Answer now."
+                print(f"    [{label}] Forcing Final Answer (attempts={attempts})")
                 messages.append({"role": "assistant", "content": response})
                 messages.append({"role": "user",      "content": force_msg})
+                
                 if stream_meta:
                     forced = self._call_llm_stream(messages, **stream_meta)
                 else:
                     forced = self._call_llm(messages)
+                    
                 if "Final Answer:" in forced:
                     idx = forced.index("Final Answer:")
-                    return forced[idx + len("Final Answer:"):].strip()
+                    answer = forced[idx + len("Final Answer:"):].strip()
+                    return answer
                 return forced
 
             # ── Neither tool nor Final Answer ──────────────────────────────
@@ -498,10 +520,18 @@ class OracleSimulation:
                 self._emit_as_stream(response, stream_meta)
                 return response
             else:
+                # Agent didn't use tools and hasn't met minimum — push ONCE then accept
+                if attempts >= loop_limit - 2:
+                    # Accept whatever we got — don't keep pushing
+                    print(f"    [{label}] Accepting response (push limit, {tool_count}/{min_tools} tools)")
+                    self._emit_as_stream(response, stream_meta)
+                    return response
                 push = TOOL_FORCE_PUSH.format(n=tool_count, min_tools=min_tools)
                 print(f"    [{label}] Pushing ({tool_count}/{min_tools})")
                 messages.append({"role": "assistant", "content": response})
                 messages.append({"role": "user",      "content": push})
+        
+        return "Simulation error: Agent failed to provide a valid response after multiple attempts."
 
     # ── Transcript helpers ────────────────────────────────────────────────
 
@@ -525,7 +555,7 @@ class OracleSimulation:
 
         transcript: List[Dict] = []
 
-        # ── Round 0: CEO Opens ────────────────────────────────────────────
+        # ── Round 0: Chair Opens ────────────────────────────────────────────
         print(f"\n{'='*60}")
         print(f"ROUND 0 — {lead.name} ({lead.title}) opens the session")
         print("="*60)
@@ -664,9 +694,9 @@ class OracleSimulation:
             )
             self._append(transcript, f"{agent3.name} ({agent3.title}) — ROUND 4 FINAL", r3_reply3)
 
-        # ── CEO Verdict ───────────────────────────────────────────────────
+        # ── Committee Verdict ─────────────────────────────────────────────
         print(f"\n{'='*60}")
-        print(f"CEO VERDICT — {lead.name} makes the binding call")
+        print(f"COMMITTEE VERDICT — {lead.name} makes the binding call")
         print("="*60)
 
         verdict_system = (
@@ -687,28 +717,29 @@ class OracleSimulation:
         )
         verdict = self._run_react_turn(verdict_system, verdict_prompt, self.MIN_CEO_VERDICT,
                                        label=f"{lead.name} (Verdict)",
-                                       stream_meta={"speaker": lead.name, "title": lead.title, "label": "CEO VERDICT", "round_num": 5})
-        self._append(transcript, f"{lead.name} ({lead.title}) — CEO VERDICT", verdict)
+                                       stream_meta={"speaker": lead.name, "title": lead.title, "label": "COMMITTEE VERDICT", "round_num": 5})
+        self._append(transcript, f"{lead.name} ({lead.title}) — COMMITTEE VERDICT", verdict)
 
-        # ── Strategist: 100-Day Survival Plan ────────────────────────────
+        # ── Strategist: Investment Memo ───────────────────────────────────
         print(f"\n{'='*60}")
-        print("STRATEGIST — Synthesizing 100-Day Survival Plan")
+        print("STRATEGIST — Synthesizing Investment Memo")
         print("="*60)
 
         strat_prompt = STRATEGIST_PROMPT.replace("{transcript}", self._fmt_transcript(transcript))
         survival_plan = self._run_react_turn(
             self.strategist_system, strat_prompt, self.MIN_STRATEGIST,
             label="Strategist",
-            stream_meta={"speaker": "Strategist", "title": "Chief Strategist", "label": "100-DAY SURVIVAL PLAN", "round_num": 6}
+            stream_meta={"speaker": "Strategist", "title": "Chief Strategist", "label": "INVESTMENT MEMO", "round_num": 6}
         )
 
         # Save to Supermemory
         if self.supermemory_client:
             try:
                 cn = self.data.get("target", {}).get("company", {}).get("name", "Unknown")
+                safe_tag = re.sub(r'[^a-zA-Z0-9_:-]', '-', f"company-{cn}")
                 self.supermemory_client.add(
                     content=f"Scenario: {self.scenario}. Move: {self.move}. Plan: {survival_plan}",
-                    container_tags=[f"company-{cn}", "survival-plan"],
+                    container_tags=[safe_tag, "investment-memo"],
                 )
                 print("[Supermemory] Plan saved.")
             except Exception as e:
@@ -731,6 +762,6 @@ if __name__ == "__main__":
     result = sim.run()
 
     print("\n" + "=" * 70)
-    print("                    100-DAY SURVIVAL PLAN")
+    print("                    INVESTMENT MEMO")
     print("=" * 70 + "\n")
     print(result)
