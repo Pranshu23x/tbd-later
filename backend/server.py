@@ -56,6 +56,7 @@ async def api_search_thesis(req: ThesisRequest):
 
 @app.post("/api/simulate")
 async def simulate(req: SimulateRequest):
+    print(f"DEBUG: /api/simulate hit with query: {req.target_company}")
     """
     MiroFish-style SSE stream.
     
@@ -81,6 +82,9 @@ async def simulate(req: SimulateRequest):
             event_queue = queue.Queue()
             result_holder = {"plan": None, "error": None, "traitor_detected": False}
 
+            # Send initial heartbeat immediately to prevent Render timeouts
+            event_queue.put({"status": "connected", "message": "Reflex Intelligence initialized..."})
+
             def run_sim_streamed():
                 try:
                     # Traitor detection logic could be moved inside the orchestrator or done here
@@ -94,7 +98,12 @@ async def simulate(req: SimulateRequest):
                         print("Neo4j Error (non-fatal):", str(e))
                         event_queue.put({"status": "graph", "phase": "graph", "message": f"Neo4j skipped: {str(e)[:80]}. Continuing..."})
 
-                    orch = ReflexOrchestrator(event_callback=lambda evt: event_queue.put(evt))
+                    def broadcast(evt):
+                        if isinstance(evt, dict) and "status" not in evt:
+                            evt["status"] = "system"  # Ensure frontend handles it
+                        event_queue.put(evt)
+
+                    orch = ReflexOrchestrator(event_callback=broadcast)
                     # The user prompt is passed as target_company from the frontend UI
                     plan = orch.run(req.target_company, num_rounds=req.num_rounds)
                     result_holder["plan"] = plan

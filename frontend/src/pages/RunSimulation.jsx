@@ -347,6 +347,16 @@ const RunSimulation = () => {
   const handleEvent = (evt) => {
     switch (evt.status) {
       /* ── Backend streaming protocol ── */
+      case 'connected': {
+        setMessages(p => [...p, { role: 'System', content: `**Reflex:** ${evt.message || 'Intelligence initialized...'}`, type: 'system' }])
+        break
+      }
+      case 'system': {
+        if (evt.message || evt.detail) {
+          setMessages(p => [...p, { role: 'System', content: evt.message || `*${evt.detail}*`, type: 'system' }])
+        }
+        break
+      }
       case 'stream_start': {
         // Determine bubble type from speaker/label
         const speaker = evt.speaker || evt.label || 'Agent'
