@@ -150,7 +150,8 @@ def _normalize_enriched(cd: dict) -> dict:
 # ── Company Search (lightweight discovery) ───────────────────────────────
 
 def search_by_thesis(industry: str = None, min_headcount: int = None,
-                     max_headcount: int = None, location=None, limit: int = 10) -> list[dict]:
+                     max_headcount: int = None, min_growth_percent: int = None,
+                     location=None, limit: int = 10) -> list[dict]:
     """
     Search for companies matching an investment thesis.
     Uses /company/search with proper filter structure.
