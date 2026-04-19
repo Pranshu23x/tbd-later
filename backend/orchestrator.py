@@ -91,6 +91,29 @@ class ReflexOrchestrator:
         if detail:
             print(f"  [{phase}] {detail}")
 
+    def _build_profiles_from_search(self, search_results, existing_ids, enriched_profiles):
+        """Convert lightweight search results into our standard profile format."""
+        for c in search_results:
+            cid = c.get("crustdata_company_id")
+            if cid in existing_ids:
+                continue
+            existing_ids.add(cid)
+            enriched_profiles.append({
+                "id": cid,
+                "name": c.get("basic_info", {}).get("name", "Unknown"),
+                "domain": c.get("basic_info", {}).get("primary_domain", ""),
+                "capital": {
+                    "funding_total": c.get("funding", {}).get("total_investment_usd"),
+                    "revenue_lower": c.get("revenue", {}).get("estimated", {}).get("lower_bound_usd"),
+                },
+                "muscle": {
+                    "headcount": c.get("headcount", {}).get("total"),
+                },
+                "arsenal": {"industry": c.get("taxonomy", {}).get("professional_network_industry")},
+                "backing": {"investor_list": c.get("funding", {}).get("investors", [])},
+                "people": {}
+            })
+
     # ── Step 1: Parse Intent ─────────────────────────────────────────────
 
     def parse_intent(self, user_prompt: str) -> dict:
@@ -194,27 +217,12 @@ class ReflexOrchestrator:
                         print(f"  ✓ Enriched {len(batch_enriched)} companies with full profiles")
                     else:
                         # Fallback: use search result data directly
-                        print(f"  ~ Batch enrichment returned no data, using search results")
-                        for c in search_results:
-                            cid = c.get("crustdata_company_id")
-                            if cid not in existing_ids:
-                                enriched_profiles.append({
-                                    "id": cid,
-                                    "name": c.get("basic_info", {}).get("name", "Unknown"),
-                                    "domain": c.get("basic_info", {}).get("primary_domain", ""),
-                                    "capital": {
-                                        "funding_total": c.get("funding", {}).get("total_investment_usd"),
-                                        "revenue_lower": c.get("revenue", {}).get("estimated", {}).get("lower_bound_usd"),
-                                        "investors": c.get("funding", {}).get("investors", [])
-                                    },
-                                    "muscle": {
-                                        "headcount": c.get("headcount", {}).get("total"),
-                                        "headcount_growth_percent": c.get("headcount", {}).get("growth_percent", {}).get("6m") or c.get("headcount", {}).get("growth_percent", {}).get("yoy")
-                                    },
-                                    "arsenal": {"industry": c.get("taxonomy", {}).get("professional_network_industry")},
-                                    "backing": {"investor_list": c.get("funding", {}).get("investors", [])}, 
-                                    "people": {}
-                                })
+                        print(f"  ~ Batch enrichment returned no data, using search results directly")
+                        self._build_profiles_from_search(search_results, existing_ids, enriched_profiles)
+                else:
+                    # All IDs already enriched or no IDs returned — use search data
+                    print(f"  ~ No new IDs to enrich, using search results directly")
+                    self._build_profiles_from_search(search_results, existing_ids, enriched_profiles)
 
         # --- Print deal pipeline ---
         print(f"\n  ═══ DEAL PIPELINE: {len(enriched_profiles)} companies enriched ═══")
@@ -235,7 +243,11 @@ class ReflexOrchestrator:
             print(f"    {i}. {p.get('name', '?')} | HC: {hc} | {fin}{inv_str}")
 
         # Package for simulation engine
-        primary = enriched_profiles[0] if enriched_profiles else {"name": "Unknown"}
+        if not enriched_profiles:
+            self._emit({"status": "data_ready", "phase": "data_ready", "detail": "No companies found", "data": {"pipeline": []}})
+            return None, None
+
+        primary = enriched_profiles[0]
         target_name = primary.get("name", "Unknown")
         rival = enriched_profiles[1] if len(enriched_profiles) > 1 else {}
 
@@ -259,7 +271,7 @@ class ReflexOrchestrator:
         # Step 2
         data, target_name = self.gather_intelligence(intent)
         
-        if not data:
+        if not data or not data.get("pipeline"):
             msg = "No companies matching your investment thesis were found in our live data feeds. Try broadening your criteria (e.g., removing headcount growth or location constraints)."
             self._emit({"phase": "error", "status": "error", "message": msg})
             return msg
