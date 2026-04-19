@@ -177,24 +177,33 @@ class ReflexOrchestrator:
                 print(f"  ✓ {profile.get('name')}: HC={hc}, {fin}")
 
         # --- Thesis-driven search ---
-        industry = intent.get("search_industry")
+        industry = intent.get("search_industry") or "Software Development"
         location_raw = (intent.get("search_location") or "").lower().strip()
         iso_codes = REGION_MAP.get(location_raw, [location_raw.upper()] if location_raw else [])
 
-        # Fallback: if industry is still null, default to a broad tech category
-        if not industry or industry == "Software Development":
-            industry = "Technology, Information and Internet"
-            print(f"  ⚠ Using broader industry category: {industry}")
+        max_hc = intent.get("max_headcount")
+        min_hc = intent.get("min_headcount")
 
-        if industry:
-            max_hc = intent.get("max_headcount")
-            self._emit({"phase": "search", "detail": f"Searching: {industry} in {iso_codes or 'global'}" + (f" (HC <= {max_hc})" if max_hc else "")})
+        # Progressive broadening: try strict first, then relax filters
+        search_attempts = [
+            {"industry": industry, "location": iso_codes, "min_hc": min_hc, "max_hc": max_hc, "label": "strict"},
+            {"industry": "Technology, Information and Internet", "location": iso_codes, "min_hc": min_hc, "max_hc": max_hc, "label": "broader industry"},
+            {"industry": industry, "location": None, "min_hc": min_hc, "max_hc": max_hc, "label": "no location"},
+            {"industry": None, "location": iso_codes, "min_hc": None, "max_hc": max_hc, "label": "location only"},
+        ]
+
+        search_results = []
+        for attempt in search_attempts:
+            label = attempt["label"]
+            loc = attempt["location"]
+            ind = attempt["industry"]
+            self._emit({"phase": "search", "detail": f"Searching ({label}): {ind or 'any'} in {loc or 'global'}" + (f" (HC <= {attempt['max_hc']})" if attempt["max_hc"] else "")})
+            
             search_results = search_by_thesis(
-                industry=industry,
-                location=iso_codes if iso_codes else None,
-                min_headcount=intent.get("min_headcount"),
-                max_headcount=max_hc,
-                min_growth_percent=intent.get("min_growth_percent"),
+                industry=ind,
+                location=loc if loc else None,
+                min_headcount=attempt["min_hc"],
+                max_headcount=attempt["max_hc"],
                 limit=10
             )
 
@@ -223,7 +232,9 @@ class ReflexOrchestrator:
                     # All IDs already enriched or no IDs returned — use search data
                     print(f"  ~ No new IDs to enrich, using search results directly")
                     self._build_profiles_from_search(search_results, existing_ids, enriched_profiles)
-
+                break  # Found results, stop broadening
+            else:
+                print(f"  ✗ No results for {label}, trying broader search...")
         # --- Print deal pipeline ---
         print(f"\n  ═══ DEAL PIPELINE: {len(enriched_profiles)} companies enriched ═══")
         for i, p in enumerate(enriched_profiles, 1):
