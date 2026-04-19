@@ -58,6 +58,7 @@ The JSON must have these fields:
   "search_location": "string or null — region keyword like 'USA', 'EU', 'India', 'UK', 'Southeast Asia'.",
   "min_headcount": "integer or null — minimum employee count",
   "max_headcount": "integer or null — maximum employee count (500 if 'startups' mentioned)",
+  "min_growth_percent": "integer or null — minimum headcount growth percentage if mentioned",
   "compare_against": "string or null — rival company if mentioned",
   "benchmarks": ["list of key metrics. Pick from: 'Headcount Growth', 'Funding Amount', 'Burn Multiple', 'ARR Growth', 'Investor Quality', 'Market Size'"],
   "investment_goal": "string — what the user wants",
@@ -170,6 +171,7 @@ class ReflexOrchestrator:
                 location=iso_codes if iso_codes else None,
                 min_headcount=intent.get("min_headcount"),
                 max_headcount=max_hc,
+                min_growth_percent=intent.get("min_growth_percent"),
                 limit=10
             )
 
@@ -203,10 +205,15 @@ class ReflexOrchestrator:
                                     "capital": {
                                         "funding_total": c.get("funding", {}).get("total_investment_usd"),
                                         "revenue_lower": c.get("revenue", {}).get("estimated", {}).get("lower_bound_usd"),
+                                        "investors": c.get("funding", {}).get("investors", [])
                                     },
-                                    "muscle": {"headcount": c.get("headcount", {}).get("total")},
+                                    "muscle": {
+                                        "headcount": c.get("headcount", {}).get("total"),
+                                        "headcount_growth_percent": c.get("headcount", {}).get("growth_percent", {}).get("6m") or c.get("headcount", {}).get("growth_percent", {}).get("yoy")
+                                    },
                                     "arsenal": {"industry": c.get("taxonomy", {}).get("professional_network_industry")},
-                                    "backing": {}, "people": {}
+                                    "backing": {"investor_list": c.get("funding", {}).get("investors", [])}, 
+                                    "people": {}
                                 })
 
         # --- Print deal pipeline ---

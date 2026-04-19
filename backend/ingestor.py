@@ -126,7 +126,7 @@ def _normalize_enriched(cd: dict) -> dict:
         },
         "muscle": {
             "headcount": hc.get("total"),
-            "headcount_growth_percent": hc.get("growth_percent", {}).get("yoy") if isinstance(hc.get("growth_percent"), dict) else hc.get("growth_percent"),
+            "headcount_growth_percent": hc.get("growth_percent", {}).get("6m") or hc.get("growth_percent", {}).get("yoy") if isinstance(hc.get("growth_percent"), dict) else hc.get("growth_percent"),
             "by_role": hc.get("by_role_absolute", {}),
         },
         "arsenal": {
@@ -159,10 +159,9 @@ def search_by_thesis(industry: str = None, min_headcount: int = None,
         industry: Crustdata industry label (use autocomplete to discover exact values)
         min_headcount: Minimum employee count
         max_headcount: Maximum employee count (use for startup searches)
+        min_growth_percent: Minimum headcount growth percent (usually 6m or yoy)
         location: ISO3 code string ("USA") or list (["DEU","FRA"])
         limit: Max results (1-1000)
-
-    Returns: list of company dicts from the `companies` response array.
     """
     conditions = []
 
@@ -187,6 +186,14 @@ def search_by_thesis(industry: str = None, min_headcount: int = None,
             "value": max_headcount
         })
 
+    if min_growth_percent:
+        # Prefer 6m growth if specified, otherwise fallback to yoy
+        conditions.append({
+            "field": "headcount.growth_percent.6m",
+            "type": ">",
+            "value": min_growth_percent
+        })
+
     if location:
         if isinstance(location, list):
             conditions.append({
@@ -203,14 +210,17 @@ def search_by_thesis(industry: str = None, min_headcount: int = None,
 
     payload = {
         "limit": limit,
-        "sorts": [{"column": "headcount.total", "order": "desc"}],
+        "sorts": [{"column": "headcount.growth_percent.6m", "order": "desc"}],
         "fields": [
             "crustdata_company_id",
             "basic_info.name",
             "basic_info.primary_domain",
             "headcount.total",
+            "headcount.growth_percent.6m",
+            "headcount.growth_percent.yoy",
             "locations.country",
             "funding.total_investment_usd",
+            "funding.investors",
             "revenue.estimated.lower_bound_usd",
             "taxonomy.professional_network_industry"
         ]
