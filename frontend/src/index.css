@@ -18,6 +18,9 @@
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+.text-purple-500 { color: #a855f7; }
+.font-semibold { font-weight: 600; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -151,18 +154,10 @@ h1 { font-size: 3.5rem; font-weight: 500; line-height: 1; letter-spacing: -1.8px
 .btn-rerun  { padding: 5px 12px; font-size: 11px; font-weight: 700; border: none; background: var(--brand-orange); color: #fff; border-radius: 4px; cursor: pointer; }
 
 /* ── Split layout ── */
-.studio-split { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.studio-split { flex: 1; display: grid; grid-template-columns: 420px 1fr; overflow: hidden; }
 
 /* ── Left panel (debate timeline) ── */
-.studio-left { 
-  width: 420px; min-width: 300px; max-width: 800px; 
-  display: flex; flex-direction: column; 
-  background: #0a0a0a; border-right: 1px solid #27272a; 
-  resize: horizontal; 
-  overflow: hidden; 
-  flex-shrink: 0;
-  min-height: 0;
-}
+.studio-left { display: flex; flex-direction: column; background: #0a0a0a; border-right: 1px solid #27272a; overflow: hidden; }
 
 .panel-bar { height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; border-bottom: 1px solid #27272a; background: #111; flex-shrink: 0; }
 .panel-bar-left { display: flex; align-items: center; gap: .5rem; }
@@ -218,7 +213,7 @@ h1 { font-size: 3.5rem; font-weight: 500; line-height: 1; letter-spacing: -1.8px
 .send-arrow { width: 36px; height: 36px; background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; color: #71717a; font-size: 16px; cursor: not-allowed; display: flex; align-items: center; justify-content: center; }
 
 /* ── Right panel (D3 Graph) ── */
-.studio-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.studio-right { display: flex; flex-direction: column; overflow: hidden; }
 
 .graph-bar { height: 44px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #27272a; background: #111; flex-shrink: 0; }
 .graph-bar-stats { display: flex; gap: 1.2rem; font-size: 12px; font-weight: 600; color: #a1a1aa; }
@@ -226,10 +221,10 @@ h1 { font-size: 3.5rem; font-weight: 500; line-height: 1; letter-spacing: -1.8px
 .graph-wrap { 
   flex: 1; 
   position: relative; 
-  background-color: #050505;
-  background-image: linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255,255,255,0.15) 1px, transparent 1px);
-  background-size: 30px 30px;
+  background-color: #0a0a0a;
+  background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 .graph-wrap svg { display: block; width: 100%; height: 100%; }
 
@@ -249,13 +244,7 @@ h1 { font-size: 3.5rem; font-weight: 500; line-height: 1; letter-spacing: -1.8px
 
 .content-text p { margin-bottom: 0.5rem; }
 .content-text ul { padding-left: 1.5rem; margin-bottom: 0.5rem; }
-.content-text strong { 
-  background: rgba(92, 103, 242, 0.25); 
-  color: #fff; 
-  padding: 2px 6px; 
-  border-radius: 4px; 
-  font-weight: 500; 
-}
+.content-text strong { color: var(--brand-orange); }
 
 .badge-system {
   background: rgba(153, 153, 153, 0.1);

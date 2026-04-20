@@ -3,8 +3,6 @@ import { useSearchParams, Link } from 'react-router-dom'
 import * as d3 from 'd3'
 import ReactMarkdown from 'react-markdown'
 
-const API_BASE_URL = 'https://reflex-36xb.onrender.com'
-
 /* ── Color palette for entity types (from MiroFish GraphPanel) ── */
 const ENTITY_COLORS = {
   Company:  '#5c67f2',
@@ -294,10 +292,7 @@ const RunSimulation = () => {
     const run = async () => {
       try {
         setStatus('analyzing')
-        // Display the user prompt immediately at the top of the timeline
-        setMessages([{ role: 'System', content: `**User Prompt:** ${query}`, type: 'system' }])
-        
-        const res = await fetch(`${API_BASE_URL}/api/simulate`, {
+        const res = await fetch('http://localhost:8000/api/simulate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -307,7 +302,7 @@ const RunSimulation = () => {
             benchmarks: ['Revenue', 'Market Share', 'Tech Stack'],
             planning: ['100-Day Plan'],
             planning_custom: '',
-            num_rounds: parseInt(searchParams.get('rounds')) || 3,
+            num_rounds: 3,
           }),
         })
 
@@ -347,16 +342,6 @@ const RunSimulation = () => {
   const handleEvent = (evt) => {
     switch (evt.status) {
       /* ── Backend streaming protocol ── */
-      case 'connected': {
-        setMessages(p => [...p, { role: 'System', content: `**Reflex:** ${evt.message || 'Intelligence initialized...'}`, type: 'system' }])
-        break
-      }
-      case 'system': {
-        if (evt.message || evt.detail) {
-          setMessages(p => [...p, { role: 'System', content: evt.message || `*${evt.detail}*`, type: 'system' }])
-        }
-        break
-      }
       case 'stream_start': {
         // Determine bubble type from speaker/label
         const speaker = evt.speaker || evt.label || 'Agent'
@@ -392,7 +377,7 @@ const RunSimulation = () => {
         if (evt.data) {
           buildGraphFromData(evt.data)
           
-          let matchStr = `**Found ${evt.data.pipeline?.length || 0} matching companies:**\n`
+          let matchStr = `**User Prompt:** ${query}\n\n**Found ${evt.data.pipeline?.length || 0} matching companies:**\n`
           if (evt.data.pipeline) {
              evt.data.pipeline.forEach((co, i) => {
                const hc = co.muscle?.headcount || 'N/A'
@@ -421,7 +406,9 @@ const RunSimulation = () => {
         break
       default:
         // Handle orchestrator phases that might not have a 'status' field
-        if (evt.phase === 'search' || evt.phase === 'enrich') {
+        if (evt.phase === 'intent_parsed') {
+          setMessages(p => [...p, { role: 'System', content: `**Parsed Intent:**\n\`\`\`json\n${JSON.stringify(evt.intent, null, 2)}\n\`\`\``, type: 'system' }])
+        } else if (evt.phase === 'search' || evt.phase === 'enrich') {
           setMessages(p => [...p, { role: 'System', content: `*${evt.detail}*`, type: 'system' }])
         } else if (evt.phase === 'data_ready' && !evt.status) {
           // Fallback if status was somehow stripped

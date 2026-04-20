@@ -58,7 +58,6 @@ The JSON must have these fields:
   "search_location": "string or null — region keyword like 'USA', 'EU', 'India', 'UK', 'Southeast Asia'.",
   "min_headcount": "integer or null — minimum employee count",
   "max_headcount": "integer or null — maximum employee count (500 if 'startups' mentioned)",
-  "min_growth_percent": "integer or null — minimum headcount growth percentage if mentioned",
   "compare_against": "string or null — rival company if mentioned",
   "benchmarks": ["list of key metrics. Pick from: 'Headcount Growth', 'Funding Amount', 'Burn Multiple', 'ARR Growth', 'Investor Quality', 'Market Size'"],
   "investment_goal": "string — what the user wants",
@@ -90,29 +89,6 @@ class ReflexOrchestrator:
         detail = event.get("detail", "")
         if detail:
             print(f"  [{phase}] {detail}")
-
-    def _build_profiles_from_search(self, search_results, existing_ids, enriched_profiles):
-        """Convert lightweight search results into our standard profile format."""
-        for c in search_results:
-            cid = c.get("crustdata_company_id")
-            if cid in existing_ids:
-                continue
-            existing_ids.add(cid)
-            enriched_profiles.append({
-                "id": cid,
-                "name": c.get("basic_info", {}).get("name", "Unknown"),
-                "domain": c.get("basic_info", {}).get("primary_domain", ""),
-                "capital": {
-                    "funding_total": c.get("funding", {}).get("total_investment_usd"),
-                    "revenue_lower": c.get("revenue", {}).get("estimated", {}).get("lower_bound_usd"),
-                },
-                "muscle": {
-                    "headcount": c.get("headcount", {}).get("total"),
-                },
-                "arsenal": {"industry": c.get("taxonomy", {}).get("professional_network_industry")},
-                "backing": {"investor_list": c.get("funding", {}).get("investors", [])},
-                "people": {}
-            })
 
     # ── Step 1: Parse Intent ─────────────────────────────────────────────
 
@@ -177,33 +153,23 @@ class ReflexOrchestrator:
                 print(f"  ✓ {profile.get('name')}: HC={hc}, {fin}")
 
         # --- Thesis-driven search ---
-        industry = intent.get("search_industry") or "Software Development"
+        industry = intent.get("search_industry")
         location_raw = (intent.get("search_location") or "").lower().strip()
         iso_codes = REGION_MAP.get(location_raw, [location_raw.upper()] if location_raw else [])
 
-        max_hc = intent.get("max_headcount")
-        min_hc = intent.get("min_headcount")
+        # Fallback: if industry is still null, default to tech
+        if not industry:
+            industry = "Technology, Information and Internet"
+            print(f"  ⚠ No industry specified, defaulting to: {industry}")
 
-        # Progressive broadening: try strict first, then relax filters
-        search_attempts = [
-            {"industry": industry, "location": iso_codes, "min_hc": min_hc, "max_hc": max_hc, "label": "strict"},
-            {"industry": "Technology, Information and Internet", "location": iso_codes, "min_hc": min_hc, "max_hc": max_hc, "label": "broader industry"},
-            {"industry": industry, "location": None, "min_hc": min_hc, "max_hc": max_hc, "label": "no location"},
-            {"industry": None, "location": iso_codes, "min_hc": None, "max_hc": max_hc, "label": "location only"},
-        ]
-
-        search_results = []
-        for attempt in search_attempts:
-            label = attempt["label"]
-            loc = attempt["location"]
-            ind = attempt["industry"]
-            self._emit({"phase": "search", "detail": f"Searching ({label}): {ind or 'any'} in {loc or 'global'}" + (f" (HC <= {attempt['max_hc']})" if attempt["max_hc"] else "")})
-            
+        if industry:
+            max_hc = intent.get("max_headcount")
+            self._emit({"phase": "search", "detail": f"Searching: {industry} in {iso_codes or 'global'}" + (f" (HC <= {max_hc})" if max_hc else "")})
             search_results = search_by_thesis(
-                industry=ind,
-                location=loc if loc else None,
-                min_headcount=attempt["min_hc"],
-                max_headcount=attempt["max_hc"],
+                industry=industry,
+                location=iso_codes if iso_codes else None,
+                min_headcount=intent.get("min_headcount"),
+                max_headcount=max_hc,
                 limit=10
             )
 
@@ -226,15 +192,23 @@ class ReflexOrchestrator:
                         print(f"  ✓ Enriched {len(batch_enriched)} companies with full profiles")
                     else:
                         # Fallback: use search result data directly
-                        print(f"  ~ Batch enrichment returned no data, using search results directly")
-                        self._build_profiles_from_search(search_results, existing_ids, enriched_profiles)
-                else:
-                    # All IDs already enriched or no IDs returned — use search data
-                    print(f"  ~ No new IDs to enrich, using search results directly")
-                    self._build_profiles_from_search(search_results, existing_ids, enriched_profiles)
-                break  # Found results, stop broadening
-            else:
-                print(f"  ✗ No results for {label}, trying broader search...")
+                        print(f"  ~ Batch enrichment returned no data, using search results")
+                        for c in search_results:
+                            cid = c.get("crustdata_company_id")
+                            if cid not in existing_ids:
+                                enriched_profiles.append({
+                                    "id": cid,
+                                    "name": c.get("basic_info", {}).get("name", "Unknown"),
+                                    "domain": c.get("basic_info", {}).get("primary_domain", ""),
+                                    "capital": {
+                                        "funding_total": c.get("funding", {}).get("total_investment_usd"),
+                                        "revenue_lower": c.get("revenue", {}).get("estimated", {}).get("lower_bound_usd"),
+                                    },
+                                    "muscle": {"headcount": c.get("headcount", {}).get("total")},
+                                    "arsenal": {"industry": c.get("taxonomy", {}).get("professional_network_industry")},
+                                    "backing": {}, "people": {}
+                                })
+
         # --- Print deal pipeline ---
         print(f"\n  ═══ DEAL PIPELINE: {len(enriched_profiles)} companies enriched ═══")
         for i, p in enumerate(enriched_profiles, 1):
@@ -254,11 +228,7 @@ class ReflexOrchestrator:
             print(f"    {i}. {p.get('name', '?')} | HC: {hc} | {fin}{inv_str}")
 
         # Package for simulation engine
-        if not enriched_profiles:
-            self._emit({"status": "data_ready", "phase": "data_ready", "detail": "No companies found", "data": {"pipeline": []}})
-            return None, None
-
-        primary = enriched_profiles[0]
+        primary = enriched_profiles[0] if enriched_profiles else {"name": "Unknown"}
         target_name = primary.get("name", "Unknown")
         rival = enriched_profiles[1] if len(enriched_profiles) > 1 else {}
 
@@ -281,11 +251,6 @@ class ReflexOrchestrator:
 
         # Step 2
         data, target_name = self.gather_intelligence(intent)
-        
-        if not data or not data.get("pipeline"):
-            msg = "No companies matching your investment thesis were found in our live data feeds. Try broadening your criteria (e.g., removing headcount growth or location constraints)."
-            self._emit({"phase": "error", "status": "error", "message": msg})
-            return msg
 
         # Step 3
         print(f"\n{'='*60}")

@@ -1,55 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-
-const PLACEHOLDERS = [
-  "Ask Reflex...",
-  "B2B SaaS, 10–100 employees, >20% headcount growth in last 6 months...",
-  "Portfolio health check: headcount and key exec departures in the last 30 days...",
-  "Identify AI startups with sudden hiring spikes in GPU engineering roles..."
-]
 
 const Simulation = () => {
   const [input, setInput] = useState('')
-  const [rounds, setRounds] = useState(3)
   const navigate = useNavigate()
-
-  const [phText, setPhText] = useState('')
-  const [phIndex, setPhIndex] = useState(0)
-  const [charIndex, setCharIndex] = useState(0)
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  useEffect(() => {
-    const currentString = PLACEHOLDERS[phIndex]
-    let timer
-
-    if (isDeleting) {
-      if (charIndex > 0) {
-        timer = setTimeout(() => {
-          setPhText(currentString.substring(0, charIndex - 1))
-          setCharIndex(c => c - 1)
-        }, 30) // Fast backspace
-      } else {
-        setIsDeleting(false)
-        setPhIndex((p) => (p + 1) % PLACEHOLDERS.length)
-      }
-    } else {
-      if (charIndex < currentString.length) {
-        timer = setTimeout(() => {
-          setPhText(currentString.substring(0, charIndex + 1))
-          setCharIndex(c => c + 1)
-        }, 60) // Typing speed
-      } else {
-        timer = setTimeout(() => {
-          setIsDeleting(true)
-        }, 2500) // Pause before deleting
-      }
-    }
-    return () => clearTimeout(timer)
-  }, [charIndex, isDeleting, phIndex])
 
   const handleSearch = () => {
     if (input.trim()) {
-      navigate(`/run?query=${encodeURIComponent(input)}&rounds=${rounds}`)
+      navigate(`/run?query=${encodeURIComponent(input)}`)
     }
   }
 
@@ -67,22 +25,6 @@ const Simulation = () => {
             New Simulation
           </button>
         </div>
-        
-        <div style={{ padding: '1rem', borderBottom: '1px solid #222', marginBottom: '1rem' }}>
-          <div className="label-micro" style={{ marginBottom: '0.8rem', color: '#a1a1aa' }}>Simulation Settings</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '13px', color: '#e4e4e7' }}>Debate Rounds</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--brand-orange)' }}>{rounds}</span>
-          </div>
-          <input 
-            type="range" 
-            min="1" max="10" 
-            value={rounds} 
-            onChange={(e) => setRounds(parseInt(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--brand-orange)' }}
-          />
-        </div>
-
         <div className="sim-history">
           <div className="label-micro" style={{ padding: '0 1rem', marginBottom: '0.5rem' }}>Recent History</div>
           <div className="history-item">US Fintech Market Analysis</div>
@@ -108,7 +50,7 @@ const Simulation = () => {
           <div className="sim-input-wrapper">
             <textarea 
               className="sim-input"
-              placeholder={phText || ' '}
+              placeholder="Ask Reflex..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               rows="1"
@@ -135,39 +77,8 @@ const Simulation = () => {
             </button>
           </div>
           
-          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '1.5rem', justifyContent: 'center', width: '100%' }}>
-            {[
-              "B2B SaaS, 10–100 employees, >20% headcount growth in last 6 months, EU-based, no US VC funding yet.",
-              "Portfolio health check: headcount and key exec departures in the last 30 days",
-              "Identify AI startups with sudden hiring spikes in GPU engineering roles"
-            ].map((s, idx) => (
-              <div 
-                key={idx} 
-                onClick={() => setInput(s)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  padding: '8px 14px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  color: '#a1a1aa',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  maxWidth: '100%',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'; e.currentTarget.style.color = '#fff'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = '#a1a1aa'; }}
-              >
-                {s.length > 60 ? s.slice(0, 60) + '...' : s}
-              </div>
-            ))}
-          </div>
-          
           <div className="sim-footer-note orange-highlighter">
-            Reflex ground in real-time using Crustdata so Agents dont hallucinate. Use with strategic discretion.
+            Reflex may ground simulations in real-time Crustdata. Use with strategic discretion.
           </div>
         </div>
       </main>

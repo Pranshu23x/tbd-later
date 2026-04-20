@@ -126,7 +126,7 @@ def _normalize_enriched(cd: dict) -> dict:
         },
         "muscle": {
             "headcount": hc.get("total"),
-            "headcount_growth_percent": hc.get("growth_percent", {}).get("6m") or hc.get("growth_percent", {}).get("yoy") if isinstance(hc.get("growth_percent"), dict) else hc.get("growth_percent"),
+            "headcount_growth_percent": hc.get("growth_percent", {}).get("yoy") if isinstance(hc.get("growth_percent"), dict) else hc.get("growth_percent"),
             "by_role": hc.get("by_role_absolute", {}),
         },
         "arsenal": {
@@ -150,19 +150,19 @@ def _normalize_enriched(cd: dict) -> dict:
 # ── Company Search (lightweight discovery) ───────────────────────────────
 
 def search_by_thesis(industry: str = None, min_headcount: int = None,
-                     max_headcount: int = None, min_growth_percent: int = None,
-                     location=None, limit: int = 10) -> list[dict]:
+                     max_headcount: int = None, location=None, limit: int = 10) -> list[dict]:
     """
     Search for companies matching an investment thesis.
-    Uses /company/search with correct Crustdata field names.
+    Uses /company/search with proper filter structure.
 
     Args:
         industry: Crustdata industry label (use autocomplete to discover exact values)
         min_headcount: Minimum employee count
         max_headcount: Maximum employee count (use for startup searches)
-        min_growth_percent: (stored for post-filtering, not a searchable Crustdata field)
         location: ISO3 code string ("USA") or list (["DEU","FRA"])
         limit: Max results (1-1000)
+
+    Returns: list of company dicts from the `companies` response array.
     """
     conditions = []
 
@@ -187,14 +187,10 @@ def search_by_thesis(industry: str = None, min_headcount: int = None,
             "value": max_headcount
         })
 
-    # NOTE: headcount growth is NOT a searchable/sortable field in Crustdata.
-    # We fetch more results and post-filter if min_growth_percent is specified.
-    fetch_limit = limit * 3 if min_growth_percent else limit
-
     if location:
         if isinstance(location, list):
             conditions.append({
-                "field": "locations.hq_country",
+                "field": "locations.country",
                 "type": "in",
                 "value": location
             })
@@ -206,17 +202,15 @@ def search_by_thesis(industry: str = None, min_headcount: int = None,
             })
 
     payload = {
-        "limit": min(fetch_limit, 100),
+        "limit": limit,
         "sorts": [{"column": "headcount.total", "order": "desc"}],
         "fields": [
             "crustdata_company_id",
             "basic_info.name",
             "basic_info.primary_domain",
-            "basic_info.year_founded",
             "headcount.total",
-            "locations.hq_country",
+            "locations.country",
             "funding.total_investment_usd",
-            "funding.investors",
             "revenue.estimated.lower_bound_usd",
             "taxonomy.professional_network_industry"
         ]
@@ -227,18 +221,13 @@ def search_by_thesis(industry: str = None, min_headcount: int = None,
     elif len(conditions) == 1:
         payload["filters"] = conditions[0]
 
-    print(f"  [search] Payload: {json.dumps(payload)}")
     try:
         r = requests.post(f"{BASE_URL}/company/search", json=payload,
                           headers=get_headers(), verify=False)
         if r.status_code != 200:
-            print(f"  [search] Error {r.status_code}: {r.text[:500]}")
+            print(f"  [search] Error {r.status_code}: {r.text[:200]}")
             return []
-        
-        results = r.json().get("companies", [])
-        print(f"  [search] Got {len(results)} raw results from Crustdata")
-        # Return up to `limit` results
-        return results[:limit]
+        return r.json().get("companies", [])
     except Exception as e:
         print(f"  [search] Exception: {e}")
         return []
