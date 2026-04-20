@@ -90,28 +90,21 @@ Every argument must be backed by <b style="color:#8b5cf6;">Crustdata</b>.
 </i></p>
 <img src="screenshots/landing.png" width="100%"/>
 
----
-
 <h3>💬 Simulation Input</h3>
 <p><i><img width="1913" height="934" alt="image" src="https://github.com/user-attachments/assets/1be2d8ba-3cf3-4baa-b273-b3c0cea2b4a4" />
 </i></p>
 <img src="screenshots/input.png" width="100%"/>
 
----
 
 <h3>⚔️ Multi-Agent Debate (War Room)</h3>
 <p><i><img width="417" height="793" alt="image" src="https://github.com/user-attachments/assets/a6d828ce-8663-442b-b290-e95a6cc03d5f" />
 </i></p>
 <img src="screenshots/debate.png" width="100%"/>
 
----
-
 <h3>🕸️ Graph Intelligence View</h3>
 <p><i><img width="1205" height="835" alt="image" src="https://github.com/user-attachments/assets/ba6eaa3c-f11a-4038-a2f4-e4d06a2ad3cf" />
 </i></p>
 <img src="screenshots/graph.png" width="100%"/>
-
----
 
 <h3>📄 Investment Memo Output</h3>
 
