@@ -203,8 +203,12 @@ Crustdata is the data layer that makes it possible.
 
 <h2>📬 Contact</h2>
 
-<ul>
-<li>Twitter / X</li>
-<li>LinkedIn</li>
-<li>Discord</li>
-</ul>
+<p align="center">
+  <a href="https://www.linkedin.com/in/pranshukumar23/" target="_blank">
+    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg" width="28" style="margin: 0 10px;" />
+  </a>
+
+  <a href="https://x.com/Pranshu23x" target="_blank">
+    <img src="https://cdn.simpleicons.org/x/ffffff" width="28" style="margin: 0 10px;" />
+  </a>
+</p>
