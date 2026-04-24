@@ -1,214 +1,268 @@
-<h1 align="center">reflex</h1>
-<h3 align="center">AI-Native Market Simulation Engine for Investment Decisions</h3>
+# Reflex
 
-<p align="center">
-Built for <b>ContextCon</b> by 
-<b style="color:#8b5cf6;">Crustdata</b> × <b>Y Combinator</b>
-</p>
+**Reflex** is an AI-native market simulation engine designed to support faster, more structured investment decision-making. It combines live company intelligence, adversarial multi-agent reasoning, and graph-based relationship analysis to help users evaluate market opportunities with greater clarity.
 
-<p align="center">
-Reflex transforms real-time market data into <b>actionable investment decisions</b> using multi-agent debate systems powered by <b style="color:#8b5cf6;">Crustdata</b>.
-</p>
+Built for **ContextCon** by **Crustdata x Y Combinator**.
 
----
+## Overview
 
----
+Traditional market research tools surface data. Reflex is built to turn that data into a decision workflow.
 
-<h2>🚀 Overview</h2>
+Given a market thesis or target company, Reflex:
 
-<p>
-Reflex replaces static market research with <b>adversarial AI decision-making</b>.
-</p>
+- parses the investment prompt into structured search intent
+- retrieves live company intelligence through Crustdata-powered workflows
+- runs a Bull vs Bear multi-agent simulation
+- incorporates graph-based relationship analysis through Neo4j
+- produces a decision-oriented investment memo with rationale and next steps
 
-<ul>
-<li>Define a market thesis</li>
-<li>Run a Bull vs Bear simulation</li>
-<li>Get a clear investment decision with execution strategy</li>
-</ul>
+The result is a more rigorous, debate-driven layer for sourcing, evaluating, and comparing opportunities.
 
----
+## Core Capabilities
 
-<h2>⚙️ How It Works</h2>
+- **Natural-language thesis parsing** to translate broad prompts into structured search parameters
+- **Live market intelligence enrichment** across company, funding, growth, and investor signals
+- **Adversarial multi-agent reasoning** with Bull, Bear, and committee-style debate flows
+- **Graph-based intelligence** to identify cross-company relationships and potential signal conflicts
+- **Streaming simulation output** for real-time debate rendering in the interface
+- **Decision memo generation** with a verdict, supporting evidence, and action plan
 
-<h3>1. Input a Market Thesis</h3>
+## How It Works
 
-<pre>
-B2B SaaS, EU, 10–100 employees, >20% headcount growth, no US VC funding
-</pre>
+### 1. Thesis Input
 
----
+Users begin with a natural-language thesis such as:
 
-<h3>2. Data Layer (Powered by <span style="color:#8b5cf6;"><b>Crustdata</b></span>)</h3>
+```text
+B2B SaaS companies in Europe with strong headcount growth and no U.S. VC funding
+```
 
-<p>
-Reflex enriches companies using real-time APIs:
-</p>
+Reflex converts that input into structured parameters including industry, region, company size, benchmarks, and investment goal.
 
-<ul>
-<li>Headcount growth</li>
-<li>Hiring signals</li>
-<li>Funding history</li>
-<li>Company & executive intelligence</li>
-</ul>
+### 2. Intelligence Gathering
 
-<p>
-All reasoning is grounded in <b style="color:#8b5cf6;">live market signals</b>, not static datasets.
-</p>
+The backend searches and enriches matching companies using external market intelligence sources, with Crustdata serving as the primary live data layer.
 
----
+Signals used in the workflow include:
 
-<h3>3. Multi-Agent Debate System</h3>
+- company identity and profile data
+- headcount and hiring indicators
+- funding history
+- investor information
+- revenue and growth context
 
-<ul>
-<li><b>Bull Analyst</b> → Finds upside and growth potential</li>
-<li><b>Bear Analyst</b> → Identifies risks and weaknesses</li>
-<li><b>Committee</b> → Makes the final decision</li>
-</ul>
+### 3. Multi-Agent Simulation
 
-<p>
-Every argument must be backed by <b style="color:#8b5cf6;">Crustdata</b>.
-</p>
+Reflex runs a structured adversarial reasoning loop:
 
----
+- **Bull Analyst** argues for upside and opportunity
+- **Bear Analyst** surfaces risks and weaknesses
+- **Committee / CEO layer** synthesizes the arguments into a final verdict
 
-<h3>4. Output (Decision Engine)</h3>
+This creates a more defensible decision process than a single-pass LLM response.
 
-<ul>
-<li>✅ Invest / Pass verdict</li>
-<li>⚠️ Key risks and opportunities</li>
-<li>🧠 Structured reasoning</li>
-<li>📈 100-day execution plan</li>
-<li>🔁 Reversal triggers</li>
-</ul>
+### 4. Graph Intelligence
 
----
+Neo4j is used to model entity relationships and detect patterns that matter during evaluation, including overlapping investor relationships and other hidden strategic signals.
 
-<h2>🖥️ Product Walkthrough</h2>
+### 5. Decision Output
 
-<h3>🏠 Landing Page</h3>
-<p><i><img width="1919" height="926" alt="image" src="https://github.com/user-attachments/assets/113d191e-6918-4177-adb2-c6d447319f07" />
-</i></p>
+The final output is an investment-style memo that can include:
 
+- an invest / pass style verdict
+- key opportunities
+- major risks
+- structured supporting reasoning
+- follow-up actions
+- reversal triggers or monitoring signals
 
-<h3>💬 Simulation Input</h3>
-<p><i><img width="1913" height="934" alt="image" src="https://github.com/user-attachments/assets/1be2d8ba-3cf3-4baa-b273-b3c0cea2b4a4" />
-</i></p>
+## Product Walkthrough
 
+### Landing Page
 
+![Landing Page](https://github.com/user-attachments/assets/113d191e-6918-4177-adb2-c6d447319f07)
 
-<h3>⚔️ Multi-Agent Debate (War Room)</h3>
-<p><i><img width="417" height="793" alt="image" src="https://github.com/user-attachments/assets/a6d828ce-8663-442b-b290-e95a6cc03d5f" />
-</i></p>
+### Simulation Input
 
-<h3>🕸️ Graph Intelligence View</h3>
-<p><i><img width="1205" height="835" alt="image" src="https://github.com/user-attachments/assets/ba6eaa3c-f11a-4038-a2f4-e4d06a2ad3cf" />
-</i></p>
+![Simulation Input](https://github.com/user-attachments/assets/1be2d8ba-3cf3-4baa-b273-b3c0cea2b4a4)
 
+### Multi-Agent Debate
 
-<h3>📄 Investment Memo Output</h3>
+![Multi-Agent Debate](https://github.com/user-attachments/assets/a6d828ce-8663-442b-b290-e95a6cc03d5f)
 
-<p><i><img width="318" height="810" alt="image" src="https://github.com/user-attachments/assets/046db80c-390d-4a3c-b1d0-f2554043160f" />
-</i></p>
+### Graph Intelligence View
 
-<pre>
+![Graph Intelligence View](https://github.com/user-attachments/assets/ba6eaa3c-f11a-4038-a2f4-e4d06a2ad3cf)
+
+### Investment Memo Output
+
+![Investment Memo Output](https://github.com/user-attachments/assets/046db80c-390d-4a3c-b1d0-f2554043160f)
+
+Example outcome:
+
+```text
 Decision: PASS on Huwise | CONSIDER Hypatos
 
 Why:
-- Huwise → 2% growth, no hiring → stalled
-- Hypatos → 13.6% growth → actively scaling
+- Huwise: low growth and weak hiring momentum
+- Hypatos: stronger scaling signals and healthier expansion
 
 Next Steps:
-- Verify burn rate
-- Track hiring velocity
+- validate burn profile
+- monitor hiring velocity
 
 Reversal Triggers:
-- Growth drops below 10%
-- Runway < 12 months
-</pre>
+- growth drops below threshold
+- runway falls below acceptable range
+```
 
----
+## Architecture
 
-<h2>🧩 Core Architecture</h2>
+Reflex is split into a Python backend and a React frontend.
 
-<ul>
-<li><b>ReACT Agent Loop</b> → Continuous reasoning + action cycle</li>
-<li><b>Crustdata Integration</b> → Real-time company intelligence</li>
-<li><b>GraphRAG Engine (Neo4j)</b> → Relationship-aware decision making</li>
-<li><b>LLM Reasoning</b> → DeepSeek / GPT-based orchestration</li>
-</ul>
+### Backend
 
----
+The backend is built with **FastAPI** and is responsible for:
 
-<h2>⚡ Key Features</h2>
+- thesis parsing
+- data ingestion and enrichment
+- simulation orchestration
+- SSE-based streaming of debate events
+- graph analysis via Neo4j
 
-<ul>
-<li>Multi-agent adversarial reasoning</li>
-<li>Real-time market data via <b style="color:#8b5cf6;">Crustdata</b></li>
-<li>Graph-based strategy mapping</li>
-<li>Board-ready investment memos</li>
-</ul>
+Key backend modules:
 
----
+- `backend/server.py` - FastAPI server and streaming API endpoints
+- `backend/orchestrator.py` - end-to-end Reflex pipeline orchestration
+- `backend/ingestor.py` - data search and enrichment workflows
+- `backend/simulation_engine.py` - multi-agent simulation logic
+- `backend/graph_manager.py` - Neo4j schema and graph analysis
+- `backend/prompts.py` - agent prompt definitions
+- `backend/tools.py` - tool integrations used by the agents
 
-<h2>🧠 Why Reflex?</h2>
+### Frontend
 
-<p>
-Traditional tools give you data.  
-Reflex gives you a <b>decision</b>.
-</p>
+The frontend is built with **React + Vite** and provides:
 
----
+- landing and onboarding views
+- simulation setup flows
+- real-time simulation rendering
+- memo and graph-oriented result views
 
-<h2>🛠️ Tech Stack</h2>
+Key frontend areas:
 
-<ul>
-<li><b>Frontend:</b> React / Next.js</li>
-<li><b>Backend:</b> Node.js</li>
-<li><b>Agents:</b> ReACT-based system</li>
-<li><b>LLM:</b> DeepSeek / GPT</li>
-<li><b>Graph DB:</b> Neo4j</li>
-<li><b>Data Layer:</b> <span style="color:#8b5cf6;"><b>Crustdata API</b></span></li>
-</ul>
+- `frontend/src/pages/Landing.jsx`
+- `frontend/src/pages/RunSimulation.jsx`
+- `frontend/src/pages/Simulation.jsx`
 
----
+## Tech Stack
 
-<h2>📦 Setup</h2>
+### Frontend
 
-<pre>
-git clone https://github.com/your-username/reflex
-cd reflex
+- React 19
+- Vite
+- React Router
+- GSAP
+- D3
+- React Markdown
+
+### Backend
+
+- Python
+- FastAPI
+- Uvicorn
+- Pydantic
+- Pandas
+- Neo4j
+- CrewAI
+- LangChain OpenAI
+
+### Data and Intelligence Layer
+
+- Crustdata
+- DeepSeek / OpenAI-compatible orchestration
+- Neo4j knowledge graph
+
+## API Surface
+
+The current backend exposes endpoints for:
+
+- `GET /api/search_company`
+- `POST /api/search_thesis`
+- `POST /api/simulate`
+
+The simulation endpoint streams server-sent events so the frontend can render debate turns in real time.
+
+## Local Setup
+
+### Backend
+
+Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the API server:
+
+```bash
+cd backend
+python server.py
+```
+
+The backend runs on `http://localhost:8000`.
+
+### Frontend
+
+Install frontend dependencies:
+
+```bash
+cd frontend
 npm install
+```
+
+Start the Vite development server:
+
+```bash
 npm run dev
-</pre>
+```
 
----
+The frontend runs on the default Vite port unless changed in configuration.
 
-<h2>⚠️ Disclaimer</h2>
+## Environment Variables
 
-<p>
-Reflex uses real-time data from <b style="color:#8b5cf6;">Crustdata</b>.  
-This is a decision-support system, not financial advice.
-</p>
+The repository expects environment configuration for external services. Based on the current codebase, this includes values such as:
 
----
+```env
+DEEPSEEK_API_KEY=
 
-<h2>🧲 Positioning</h2>
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=
+```
 
-<p align="center">
-<b>Reflex is the intelligence layer for capital allocation.</b><br/>
-Crustdata is the data layer that makes it possible.
-</p>
+Additional API credentials may be required depending on the data and tool integrations configured in the backend.
 
----
+## Positioning
 
-<h2>📬 Contact</h2>
+Reflex is best understood as a decision layer for capital allocation workflows:
 
-<p align="center">
-  <a href="https://www.linkedin.com/in/pranshukumar23/" target="_blank">
-    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg" width="28" style="margin: 0 10px;" />
-  </a>
+- Crustdata provides live market intelligence
+- Reflex structures that intelligence into an interactive simulation and recommendation system
 
-  <a href="https://x.com/Pranshu23x" target="_blank">
-    <img src="https://cdn.simpleicons.org/x/ffffff" width="28" style="margin: 0 10px;" />
-  </a>
-</p>
+It is designed for use cases such as:
+
+- early-stage company screening
+- thematic sourcing
+- market mapping
+- comparative diligence
+- internal investment memo generation
+
+## Disclaimer
+
+Reflex is a decision-support product. It is not financial advice and should not be treated as a substitute for legal, financial, or investment due diligence.
+
+## Contact
+
+- [LinkedIn](https://www.linkedin.com/in/pranshukumar23/)
+- [X](https://x.com/Pranshu23x)
